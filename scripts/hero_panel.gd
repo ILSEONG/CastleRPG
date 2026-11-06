@@ -39,7 +39,7 @@ const EQUIP_LEFT := 5  # 왼쪽 줄 칸 수(GameData.EQUIP_SLOTS 앞에서부터
 const EQUIP_COLOR := Color(0.2, 0.42, 0.75)
 
 const SLOT_SIZE := Vector2(140, 150)
-const CARD_SIZE := Vector2(200, 240)
+const CARD_SIZE := Vector2(196, 240)  # 3칸 + 간격 + 스크롤 막대가 시트 안에 들어가게(200이면 창이 4px 넓어진다, 2026-11-05)
 const GRID_COLUMNS := 3
 const BIG_CARD_MIN_H := 380.0  # 큰 카드 최소 높이(남는 높이는 카드가 3, 스킬·설명 칸이 1 비율로 받는다)
 const INFO_MIN_H := 110.0  # 스킬·설명 칸 최소 높이(넘치면 스크롤)
@@ -464,11 +464,9 @@ func _build_detail() -> void:
 	_detail_view.add_child(nav)
 	prev_button = _button(Lang.t("hero_panel.build_detail_3"), UiKit.STEEL)
 	prev_button.pressed.connect(step.bind(-1))
-	var close_button := _button(Lang.t("hero_panel.build_detail_4"), UiKit.STEEL)
-	close_button.pressed.connect(_show_list)
 	next_button = _button(Lang.t("hero_panel.build_detail_5"), UiKit.STEEL)
 	next_button.pressed.connect(step.bind(1))
-	for b in [prev_button, close_button, next_button]:
+	for b in [prev_button, next_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nav.add_child(b)
 

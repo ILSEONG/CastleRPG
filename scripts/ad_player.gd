@@ -52,15 +52,13 @@ func _ready() -> void:
 	col.add_child(bar)
 	time_label = _label("", 26, Color(1, 0.93, 0.6))
 	col.add_child(time_label)
-	close_button = Button.new()
-	close_button.text = Lang.t("ad_player.ready_3")
-	close_button.focus_mode = Control.FOCUS_NONE
-	close_button.custom_minimum_size = Vector2(200, 64)
-	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close_button.add_theme_font_size_override("font_size", 24)
-	UiKit.apply_button(close_button, UiKit.STEEL, 12.0)
-	close_button.pressed.connect(_close)
-	col.add_child(close_button)
+	close_button = UiKit.close_x(_close)  # 화면 오른쪽 위 닫기 X(2026-11-05, [닫기] 대신) — 끝까지 안 보고 닫으면 보상 없음
+	close_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	close_button.offset_left = -UiKit.CLOSE_X_PX - 24
+	close_button.offset_right = -24
+	close_button.offset_top = 90
+	close_button.offset_bottom = 90 + UiKit.CLOSE_X_PX
+	add_child(close_button)
 	if Engine.has_singleton("CastleAds"):
 		_ads = Engine.get_singleton("CastleAds")
 		_ads.connect("ad_loaded", _on_ad_loaded)
@@ -75,6 +73,9 @@ func play(done: Callable) -> void:
 		return  # 이미 재생 중(빠른 두 번 누름) — 같은 광고를 다시 시작하지 않는다
 	if instant:
 		done.call("")
+		return
+	if _ads == null and LiveOps.ad_ssv and Net.is_online():
+		Economy.notice.emit(Lang.t("ad_player.play"))  # 실제 광고가 없는 앱(토스·PC) — 서버가 확인된 광고만 받는다
 		return
 	_done = done
 	if _ads != null:

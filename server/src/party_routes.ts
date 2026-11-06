@@ -392,9 +392,9 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       const real = x.now - Number(run.started_at)
       const limit = PQ.TIME_LIMIT[quest]
       // 사람이 나 혼자(나머지는 AI 성주)인 판은 내 기기가 전부 판단한다 — 던전처럼 더 좁게 본다(2026-10-27 보안 점검): 힘 여유 SOLO_DPS_SLACK,
-      // 실제 경과 ≥ 걸린 시간(파티 전투는 늘 1배). 사람 수 = 이 매치의 run 행 수(사람마다 처음 물을 때 만든다 — 서버를 다시 켜도 남는다)
-      const [{ n: humans }] = await query('select count(*)::int as n from party_runs where match_id = $1', [run.match_id])
-      const solo = Number(humans) <= 1
+      // 실제 경과 ≥ 걸린 시간(파티 전투는 늘 1배). 사람 수 = 실시간 방에 실제로 들어온 사람(2026-11-06 — run 행 수로 세면 부계정이 GET 한 번으로
+      // run만 만들어 여유를 넓혔다). 방 기록이 없으면(서버 재시작 등) 혼자로 본다.
+      const solo = (live?.humansIn(run.match_id) ?? 0) <= 1
       const plausible = told.elapsed >= PQ.MIN_CLEAR_SEC && told.elapsed <= limit + 5 && real >= told.elapsed / (solo ? 1 : R.MAX_GAME_SPEED) - R.RUN_SLACK_SEC
         && real <= R.RUN_TTL_SEC && Number(run.dps) * told.elapsed * (solo ? PQ.SOLO_DPS_SLACK : PQ.DPS_SLACK) >= Number(run.boss_hp)
       const win = told.win && plausible
@@ -431,7 +431,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     live.verify = verifyToken
     live.seatOf = (matchId, pid) => {
       const m = hub.matches.get(matchId)
-      return m && m.state === 'live' ? m.seats.findIndex((s) => s.pid === pid) : -1
+      return m && m.state === 'live' ? m.seats.findIndex((s) => s.pid === pid && !s.left) : -1 // 끝내고 나간 사람은 다시 못 들어온다
     }
     live.onEnd = (matchId, _pid, win, elapsed) => hub.report(matchId, win, elapsed)
   }

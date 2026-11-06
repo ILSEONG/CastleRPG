@@ -271,3 +271,39 @@ static func checkbox(text: String) -> Button:
 	l.add_theme_color_override("font_color", INK)
 	b.add_child(l)
 	return b
+
+
+const CLOSE_X_PX := 56.0  # 오른쪽 위 닫기(X) 버튼 한 변
+
+
+## 닫기(X) 버튼 하나: 강철색 네모 + 흰 X(RoK·로드 모바일처럼 창 오른쪽 위에 둔다, 금색 없음). 누르면 on_press.
+static func close_x(on_press: Callable) -> Button:
+	var x := Button.new()
+	x.focus_mode = Control.FOCUS_NONE
+	x.custom_minimum_size = Vector2(CLOSE_X_PX, CLOSE_X_PX)
+	x.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	apply_button(x, STEEL, 10.0)
+	x.pressed.connect(on_press)
+	var face := Control.new()
+	face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.draw.connect(func():
+		var c := face.size / 2.0
+		var r := CLOSE_X_PX * 0.2
+		for d in [Vector2(r, r), Vector2(r, -r)]:
+			face.draw_line(c - d, c + d, Color.WHITE, 5.0, true))
+	x.add_child(face)
+	return x
+
+
+## 패널(PanelContainer) 내용 영역 오른쪽 위 구석에 닫기(X)를 겹쳐 둔다(2026-11-05: 모든 창·팝업의 [닫기] 대신).
+static func corner_x(panel: Container, on_press: Callable) -> Button:
+	var corner := Control.new()  # PanelContainer가 내용 영역 크기로 맞춘다 — 누름은 통과
+	corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(corner)
+	var x := close_x(on_press)
+	x.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	x.offset_left = -CLOSE_X_PX
+	x.offset_bottom = CLOSE_X_PX
+	corner.add_child(x)
+	return x

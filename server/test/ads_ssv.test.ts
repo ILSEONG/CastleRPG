@@ -158,9 +158,9 @@ test('광고 표: 다음 날 같은 n으로 다시 못 쓴다, 쓴 표를 매진
     await S.db.query("update ad_views set created_at = now() - interval '2 hours' where token = $1", [t3])
     assert.equal((await buy('a_dia', 0, t3)).json.error, 'ad_unverified')
     assert.equal((await buy('a_dia', 0, await ticket())).status, 200)
-    // 토스 미니앱에는 실제 광고가 없다(5초 자리 표시) — 토스 계정은 ad_ssv=1이어도 예전처럼
+    // 토스 계정 예외 없음(2026-11-06 보안 점검): 토스 hash는 서버가 확인할 수 없어 누구나 토스 계정을 만들 수 있다 — 확인된 광고 없이는 못 받는다
     const toss = await S.req('POST', '/v1/auth/toss', { body: { hash: 'toss-user-hash-0001' } })
-    assert.equal((await buy('a_dia', 0, undefined, toss.json.token)).status, 200)
+    assert.equal((await buy('a_dia', 0, undefined, toss.json.token)).json.error, 'ad_unverified')
     assert.equal((await buy('a_dia', 1, undefined)).json.error, 'ad_unverified') // 게스트는 그대로
   } finally {
     await S.close()

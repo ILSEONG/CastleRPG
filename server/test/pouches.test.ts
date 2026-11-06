@@ -30,12 +30,12 @@ test('출석 1일차 골드 주머니(30분) → 열면 스테이지 1 방치 �
   S.clock.t = T0
   const { token, id } = await S.login()
   let r = await S.req('POST', '/v1/attendance/claim', { token, body: { day: 1 } })
-  assert.deepEqual(r.json.player.pouches, { gold_30: 1 })
+  assert.deepEqual(r.json.player.pouches, { gold_30: 2 })
   const before = r.json.player.gold_tenths
-  r = await open(token, 'gold_30')
+  r = await open(token, 'gold_30', 2)
   assert.equal(r.status, 200)
-  assert.deepEqual(r.json.opened, { id: 'gold_30', count: 1, gold_tenths: 54_000, res: {} })
-  assert.equal(r.json.player.gold_tenths, before + 54_000)
+  assert.deepEqual(r.json.opened, { id: 'gold_30', count: 2, gold_tenths: 108_000, res: {} })
+  assert.equal(r.json.player.gold_tenths, before + 108_000)
   assert.deepEqual(r.json.player.pouches, {})
   assert.equal((await open(token, 'gold_30')).json.error, 'not_enough')
   assert.equal((await open(token, 'gold_15')).status, 404)
@@ -51,11 +51,11 @@ test('출석 3일차 자원 주머니(30분) → 목재·석재·식량 건물 3
     assert.equal((await S.req('POST', '/v1/attendance/claim', { token, body: { day: d } })).status, 200)
   }
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual(p.pouches, { gold_30: 1, res_30: 1 })
+  assert.deepEqual(p.pouches, { gold_30: 2, res_30: 2 })
   const r = await open(token, 'res_30')
   assert.deepEqual(r.json.opened.res, { wood: 3000, stone: 3000, food: 3000 })
   assert.equal(r.json.player.res.wood, p.res.wood + 3000)
-  assert.equal((await open(token, 'gold_30', 2)).json.error, 'not_enough')
+  assert.equal((await open(token, 'gold_30', 3)).json.error, 'not_enough')
 })
 
 test('미션 보상의 주머니: 일일 처치 미션 → 골드 주머니(10분)', async () => {
@@ -64,7 +64,7 @@ test('미션 보상의 주머니: 일일 처치 미션 → 골드 주머니(10�
   await S.req('POST', '/v1/test/events', { token, body: { events: { kill: 300 } } })
   const r = await S.req('POST', '/v1/mission/claim', { token, body: { id: 'd_kill' } })
   assert.equal(r.status, 200)
-  assert.deepEqual(r.json.player.pouches, { gold_10: 1 })
+  assert.deepEqual(r.json.player.pouches, { gold_10: 2 })
   assert.equal((await open(token, 'gold_10')).json.opened.gold_tenths, 18_000)
 })
 

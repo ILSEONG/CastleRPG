@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as P from '../src/pvp.ts'
-import { setup } from './helpers.ts'
+import { setup, takeMail } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 let S: Setup
@@ -138,11 +138,15 @@ test('pvp shop: coins, limit, rewards', async () => {
   const g0 = (await S.req('GET', '/v1/player', { token: p.token })).json.player.gold
   const r = await S.req('POST', '/v1/pvp/buy', { token: p.token, body: { id: 'gold' } })
   assert.equal(r.status, 200, JSON.stringify(r.json))
-  assert.equal(r.json.player.gold, g0 + 30000)
+  assert.equal(r.json.player.gold, g0) // 재화는 우편으로(2026-11-05)
+  assert.equal(r.json.result.mail, true)
   assert.equal(r.json.pvp.coins, 940)
   const t = await S.req('POST', '/v1/pvp/buy', { token: p.token, body: { id: 'ticket' } })
   assert.equal(t.status, 200)
-  assert.equal(t.json.player.dia_tickets, r.json.player.dia_tickets + 1)
+  const m = (await S.req('GET', '/v1/mail', { token: p.token })).json.mails
+  assert.deepEqual(m.map((x: { reward: unknown }) => x.reward), [{ tickets: 1 }, { gold: 30000 }])
+  const got = await takeMail(S, p.token)
+  assert.deepEqual([got.json.player.gold, got.json.player.dia_tickets], [g0 + 30000, t.json.player.dia_tickets + 1])
   const t2 = await S.req('POST', '/v1/pvp/buy', { token: p.token, body: { id: 'ticket' } })
   assert.equal(t2.json.error, 'sold_out')
   assert.equal(t2.status, 409)

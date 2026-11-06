@@ -18,7 +18,7 @@ after(async () => {
   await S.close()
 })
 
-const A = (path: string, body: unknown) => S.req('POST', path, { token: admin.token, body })
+const A = (path: string, body: unknown) => S.req('POST', path, { token: admin.token, body, headers: { 'x-app-version': '99.0.0' } }) // 관리자 앱(최신)
 const code = (id: string) => id.replace(/-/g, '').slice(0, 8).toUpperCase()
 
 test('관리자만: 일반 플레이어는 403', async () => {
@@ -92,7 +92,7 @@ test('점검: 일반 플레이어 503(로그인·상태·공지는 열림), 관�
   assert.equal((await S.req('GET', '/v1/player', { token })).status, 200)
 })
 
-test('최소 버전: 낮은 버전 426(상태·공지만 열림), 같거나 높으면 통과, 머리글 없으면 통과', async () => {
+test('최소 버전: 낮은 버전 426(상태·공지만 열림), 같거나 높으면 통과, 머리글이 없거나 이상해도 426(고친 옛 앱이 빼고 보내지 못하게)', async () => {
   const { token } = await S.login()
   await A('/v1/admin/status', { min_version: '0.3.0', store_url: 'https://play.google.com/store/apps/details?id=com.ilesong.castlerpg' })
   const old = await S.req('GET', '/v1/player', { token, headers: { 'x-app-version': '0.2.9' } })
@@ -102,7 +102,8 @@ test('최소 버전: 낮은 버전 426(상태·공지만 열림), 같거나 높�
   assert.equal((await S.req('GET', '/v1/status', { headers: { 'x-app-version': '0.2.9' } })).status, 200)
   assert.equal((await S.req('GET', '/v1/player', { token, headers: { 'x-app-version': '0.3' } })).status, 200)
   assert.equal((await S.req('GET', '/v1/player', { token, headers: { 'x-app-version': '0.10.0' } })).status, 200)
-  assert.equal((await S.req('GET', '/v1/player', { token })).status, 200)
+  assert.equal((await S.req('GET', '/v1/player', { token })).status, 426)
+  assert.equal((await S.req('GET', '/v1/player', { token, headers: { 'x-app-version': 'v9' } })).status, 426)
   assert.equal((await A('/v1/admin/status', { min_version: 'abc' })).status, 400)
   await A('/v1/admin/status', { min_version: '' })
   assert.equal((await S.req('GET', '/v1/player', { token, headers: { 'x-app-version': '0.1.0' } })).status, 200)

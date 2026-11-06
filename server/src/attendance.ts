@@ -21,39 +21,37 @@ export interface AttendReward {
   [speedup: `speedup_${string}`]: number
 }
 
-const RES = (n: number): AttendReward => ({ wood: n, stone: n, food: n })
-
 // 1..28일차(인덱스 0 = 1일차). 7·14·21·28일차가 큰 보상.
 export const REWARDS: AttendReward[] = [
   // 1주차
-  { gold: 10000, pouch_gold_30: 1, speedup_builder_2880: 1 },
+  { pouch_gold_30: 2, speedup_builder_2880: 1 },
   { tickets: 5, speedup_any_180: 2 },
-  { ...RES(5000), pouch_res_30: 1 },
-  { diamonds: 100 },
+  { pouch_res_30: 2 },
+  { diamonds: 1000 },
   { keys_equip: 2 },
-  { gold: 30000, pouch_gold_60: 1 },
+  { pouch_gold_60: 2 },
   { equip: { grade: 'SR' }, tickets: 5, speedup_build_1440: 1 },
   // 2주차
-  { gold: 20000, pouch_gold_60: 1 },
+  { pouch_gold_60: 2 },
   { tickets: 5, speedup_any_180: 2 },
   { keys_gold: 3 },
-  { diamonds: 150 },
-  { ...RES(10000), pouch_res_60: 1 },
+  { diamonds: 1500 },
+  { pouch_res_60: 2 },
   { keys_ticket: 2 },
   { hero: 'luna', tickets: 10, speedup_any_1440: 1 },
   // 3주차
-  { gold: 30000, pouch_gold_120: 1 },
+  { pouch_gold_120: 2 },
   { tickets: 5, speedup_any_180: 2 },
   { keys_equip: 2 },
-  { diamonds: 200 },
-  { ...RES(15000), pouch_res_120: 1 },
-  { gold: 50000, pouch_gold_240: 1 },
+  { diamonds: 2000 },
+  { pouch_res_120: 2 },
+  { pouch_gold_240: 2 },
   { equip: { grade: 'SSR' }, speedup_research_1440: 1 },
   // 4주차
-  { gold: 50000, pouch_gold_240: 1 },
+  { pouch_gold_240: 2 },
   { tickets: 10, speedup_any_180: 2 },
   { equip: { grade: 'SR' } },
-  { diamonds: 300, pouch_res_240: 1 },
+  { diamonds: 3000, pouch_res_240: 1 },
   { keys_ticket: 3 },
   { tickets: 20, pouch_gold_360: 1, pouch_res_360: 1 },
   { hero: 'arteon', speedup_builder_10080: 1 },

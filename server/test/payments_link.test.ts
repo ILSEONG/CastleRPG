@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createHash, generateKeyPairSync, randomBytes, createVerify } from 'node:crypto'
 import { test } from 'node:test'
 import * as Pay from '../src/payments.ts'
-import { setup } from './helpers.ts'
+import { setup, takeMail } from './helpers.ts'
 
 // 가짜 확인기: token "ok:<상품>"이면 그 상품의 완료 결제, "pending"이면 진행 중, "boom"이면 확인 서버 오류, 그 밖은 무효.
 function fakeVerifier(orderPrefix: string) {
@@ -26,8 +26,11 @@ function fakeVerifier(orderPrefix: string) {
   return { v, finished }
 }
 
-const buy = (S: any, token: string, product: string, provider: string, t: string) =>
-  S.req('POST', '/v1/iap/purchase', { token, body: { product, provider, token: t } })
+// 사고 우편함을 다 받는다(2026-11-05부터 받는 것은 우편으로 온다)
+const buy = async (S: any, token: string, product: string, provider: string, t: string) => {
+  const r = await S.req('POST', '/v1/iap/purchase', { token, body: { product, provider, token: t } })
+  return r.status === 200 && r.json.bought?.mail ? takeMail(S, token, r) : r
+}
 
 test('Google 결제: 확인되면 지급 + consume, 다시 보내면 already(+ consume 다시), 진행 중 202, 무효·상품 불일치 402, 확인 오류 502', async () => {
   const g = fakeVerifier('GPA')
@@ -143,6 +146,7 @@ test('googleVerifier: 서비스 계정 JWT로 토큰을 받고 구매를 조회,
     t2: { purchaseState: 2, orderId: 'GPA.2' },
     t3: { purchaseState: 1, orderId: 'GPA.3' },
     t4: { purchaseState: 0, orderId: 'GPA.4', obfuscatedExternalAccountId: 'someone' },
+    t5: { purchaseState: 0, orderId: 'GPA.5' }, // 계정 표시 없이 산 영수증(2026-11-06 보안 점검: 다른 계정에서 받지 못한다)
   }
   const fetchFn = (async (u: any, init: any = {}) => {
     const url = String(u)
@@ -165,6 +169,7 @@ test('googleVerifier: 서비스 계정 JWT로 토큰을 받고 구매를 조회,
   assert.equal((await v.verify({ product: 'dia_1', token: 't2', account: 'acc' })).pending, true)
   assert.equal((await v.verify({ product: 'dia_1', token: 't3', account: 'acc' })).ok, false)
   assert.equal((await v.verify({ product: 'dia_1', token: 't4', account: 'acc' })).ok, false)
+  assert.equal((await v.verify({ product: 'dia_1', token: 't5', account: 'acc' })).ok, false)
   assert.equal((await v.verify({ product: 'dia_1', token: 'zz', account: 'acc' })).ok, false)
   await v.finish!({ product: 'dia_1', token: 't1' })
   assert.equal(calls.filter((c) => c.url.includes('oauth2')).length, 1, 'access token is cached')

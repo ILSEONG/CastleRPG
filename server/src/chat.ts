@@ -4,6 +4,12 @@
 //  POST /v1/chat/report {id}   남의 메시지 신고 → {ok, already}. 신고한 사람·신고당한 사람·그 메시지·그때 채널 앞뒤 메시지(CONTEXT개씩, 원문 포함)를 남긴다.
 //       거절은 400(no_message · own_message · too_many). 같은 메시지를 다시 신고하면 already: true
 //  GET  /v1/chat/reports      관리자만(admin_emails) — 최근 신고 REPORTS_PAGE개 → {reports}
+// 채팅 금지(2026-11-06 사용자 "신고가 효과가 없고 채팅 금지 기능을 할 수 있는 관리자 페이지", 마이그레이션 069 chat_mutes):
+//  금지된 사람이 보내면 403 muted. 관리자 [운영 관리 → 신고]:
+//  GET  /v1/admin/chat/reports?filter=all   처리 전(open) 신고(filter=all이면 전부) + 신고당한 사람마다 처리 전 신고 수·금지 상태, 금지 중인 사람 목록
+//  POST /v1/admin/chat/mute {player, minutes, reason?}   minutes: 0 = 풀기, -1 = 영구, 1..MUTE_MAX_MIN = 그만큼. 금지하면 그 사람의 처리 전 신고는
+//       'muted'로 닫고, 신고된 그 사람의 메시지는 채팅에서 지운다
+//  POST /v1/admin/chat/report {id, status: 'open'|'dismissed'}   신고 하나를 넘기기(문제없음)·다시 열기
 // 메시지 = {id, name, text, at, me}. 이름은 다른 화면(랭킹·길드원)과 같은 G.playerName(id).
 // 길드 채널은 지금 든 길드의 실제 길드원만 본다(가상 길드원은 말하지 않는다).
 import type { Hono } from 'hono'
@@ -19,12 +25,16 @@ export const CHANNELS = ['all', 'guild'] as const
 export const CONTEXT = 10 // 신고 때 남기는 앞뒤 메시지 수(각각)
 export const REPORTS_PER_DAY = 20 // 한 사람이 하루(24시간)에 할 수 있는 신고 수
 export const REPORTS_PAGE = 100
+export const MUTE_MAX_MIN = 365 * 24 * 60
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export { mask } from './profanity.ts'
 
 // 줄바꿈·제어 문자는 공백 하나로, 앞뒤 공백은 지운다. 너무 길면 MAX_LEN 글자에서 자른다.
+// NFKC로 전각·동그라미 글자(ｆｕｃｋ·ⓕⓤⓒⓚ)를 보통 글자로 바꿔 욕설 거르기를 피하지 못하게 하고, 보이지 않는 채움 글자(ㅤ U+3164·
+// 점자 빈칸 U+2800 등)는 공백으로 — 빈 메시지·줄 밀기를 막는다(2026-11-06 보안 점검).
 export function clean(text: string): string {
-  const t = text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, ' ').replace(/\s+/g, ' ').trim()
+  const t = text.normalize('NFKC').replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u115F\u1160\u3164\uFFA0\u2800]+/gu, ' ').replace(/\s+/g, ' ').trim()
   return [...t].slice(0, MAX_LEN).join('')
 }
 
@@ -32,7 +42,7 @@ export function clean(text: string): string {
 type Any = any
 
 export function registerChat(app: Hono<Any>, d: Any) {
-  const { query, auth, clock, body, ApiError } = d
+  const { query, auth, clock, body, ApiError, isAdmin } = d
   const live = d.live as import('./chat_live.ts').ChatLive | undefined
   if (live) live.verify = d.verifyToken
   const bad = (code: string, msg: string) => new ApiError(400, code, msg)
@@ -93,6 +103,8 @@ export function registerChat(app: Hono<Any>, d: Any) {
     if (typeof b.text !== 'string') throw new ApiError(400, 'bad_request', "'text' must be a string")
     const text = mask(clean(b.text))
     if (text === '') throw bad('empty', 'message is empty')
+    const [mu] = await query('select extract(epoch from until)::float8 as until from chat_mutes where player_id = $1 and (until is null or until > to_timestamp($2::float8))', [id, clock()])
+    if (mu) throw new ApiError(403, 'muted', mu.until == null ? 'chat is blocked' : `chat is blocked until ${new Date(Number(mu.until) * 1000).toISOString()}`)
     let channel = 'all'
     if (ch === 'guild') {
       const g = await myGuild(id)
@@ -146,5 +158,67 @@ export function registerChat(app: Hono<Any>, d: Any) {
     return c.json({ server_now: clock(), reports: rows.map((r: Any) => ({ id: Number(r.id), reporter: r.reporter, reporter_name: r.reporter_name, target: r.target,
       target_name: r.target_name, message_id: Number(r.message_id), channel: r.channel === 'all' ? 'all' : 'guild', text: r.text, raw: r.raw, status: r.status, at: Number(r.at),
       context: typeof r.context === 'string' ? JSON.parse(r.context) : r.context })) })
+  })
+
+  // --- 관리자: 신고 처리·채팅 금지 ---
+
+  async function admin(c: Any) {
+    if (!isAdmin || !(await isAdmin(c.get('playerId') as string))) throw new ApiError(403, 'not_admin', 'admins only')
+  }
+  const code = (col: string) => `upper(substr(replace(${col}::text, '-', ''), 1, 8))`
+  const MUTED = (col: string) => `(select json_build_object('until', extract(epoch from m.until)::float8) from chat_mutes m where m.player_id = ${col}
+    and (m.until is null or m.until > to_timestamp($1::float8)))`
+
+  app.get('/v1/admin/chat/reports', auth, async (c: Any) => {
+    await admin(c)
+    const now = clock()
+    const all = c.req.query('filter') === 'all'
+    const rows = await query(`select r.id, r.reporter_name, ${code('r.reporter')} as reporter_code, r.target::text as target, r.target_name, ${code('r.target')} as target_code,
+        r.message_id, r.channel, r.text, r.raw, r.context, r.status, extract(epoch from r.at)::float8 as at,
+        (select count(*)::int from chat_reports x where x.target = r.target and x.status = 'open') as target_open, ${MUTED('r.target')} as muted
+      from chat_reports r ${all ? '' : "where r.status = 'open'"} order by r.id desc limit ${REPORTS_PAGE}`, [now])
+    const mutes = await query(`select m.player_id::text as player, ${code('m.player_id')} as code, m.reason, extract(epoch from m.until)::float8 as until,
+        extract(epoch from m.at)::float8 as at from chat_mutes m where m.until is null or m.until > to_timestamp($1::float8) order by m.at desc limit 100`, [now])
+    const [{ n }] = await query("select count(*)::int as n from chat_reports where status = 'open'")
+    const js = (v: Any) => (typeof v === 'string' ? JSON.parse(v) : v)
+    return c.json({ server_now: now, open: Number(n), reports: rows.map((r: Any) => ({ id: Number(r.id), reporter_name: String(r.reporter_name), reporter_code: String(r.reporter_code),
+      target: String(r.target), target_name: String(r.target_name), target_code: String(r.target_code), message_id: Number(r.message_id),
+      channel: r.channel === 'all' ? 'all' : 'guild', text: String(r.text), raw: r.raw == null ? null : String(r.raw), status: String(r.status), at: Number(r.at),
+      target_open: Number(r.target_open), muted: r.muted == null ? null : { until: js(r.muted).until ?? null }, context: js(r.context) ?? [] })),
+    mutes: mutes.map((m: Any) => ({ player: String(m.player), code: String(m.code), reason: String(m.reason), until: m.until == null ? null : Number(m.until), at: Number(m.at) })) })
+  })
+
+  app.post('/v1/admin/chat/mute', auth, async (c: Any) => {
+    await admin(c)
+    const b = await body(c)
+    const player = b.player
+    const minutes = b.minutes
+    if (typeof player !== 'string' || !UUID_RE.test(player)) throw new ApiError(400, 'bad_request', "'player' must be a player id")
+    if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < -1 || minutes > MUTE_MAX_MIN) throw new ApiError(400, 'bad_request', `'minutes' must be -1, 0 or 1..${MUTE_MAX_MIN}`)
+    const reason = typeof b.reason === 'string' ? [...b.reason.trim()].slice(0, 200).join('') : ''
+    const [p] = await query('select 1 from players where id = $1', [player])
+    if (!p) throw new ApiError(404, 'no_player', 'no such player')
+    const now = clock()
+    if (minutes === 0) {
+      await query('delete from chat_mutes where player_id = $1', [player])
+      return c.json({ server_now: now, muted: null })
+    }
+    const until = minutes === -1 ? null : now + minutes * 60
+    await query(`insert into chat_mutes (player_id, until, reason, at) values ($1, to_timestamp($2::float8), $3, to_timestamp($4::float8))
+      on conflict (player_id) do update set until = excluded.until, reason = excluded.reason, at = excluded.at`, [player, until, reason, now])
+    // 신고된 그 사람의 메시지는 채팅에서 지우고(신고 기록에는 원문이 남는다), 처리 전 신고는 닫는다
+    await query("delete from chat_messages where id in (select message_id from chat_reports where target = $1 and status = 'open')", [player])
+    await query("update chat_reports set status = 'muted' where target = $1 and status = 'open'", [player])
+    return c.json({ server_now: now, muted: { until } })
+  })
+
+  app.post('/v1/admin/chat/report', auth, async (c: Any) => {
+    await admin(c)
+    const b = await body(c)
+    if (typeof b.id !== 'number' || !Number.isSafeInteger(b.id) || b.id <= 0) throw new ApiError(400, 'bad_request', "'id' must be a positive integer")
+    if (b.status !== 'open' && b.status !== 'dismissed') throw new ApiError(400, 'bad_request', "'status' must be 'open' or 'dismissed'")
+    const [r] = await query('update chat_reports set status = $2 where id = $1 returning status', [b.id, b.status])
+    if (!r) throw new ApiError(404, 'no_report', 'no such report')
+    return c.json({ server_now: clock(), status: String(r.status) })
   })
 }

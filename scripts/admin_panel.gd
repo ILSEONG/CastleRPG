@@ -11,10 +11,12 @@ extends "res://scripts/ops_sheet.gd"
 ##   계정 삭제 요청(분류 delete, 앱 없이 웹 양식 /legal/account-deletion): 본인 확인 뒤 [계정 삭제] 두 번 → 그 계정 삭제(자동 삭제 없음).
 ##  통계(2026-10-23) — server/src/retention.ts: 오늘·7일 접속, 하루 뒤(D1)·일주일 뒤(D7) 복귀율, 날마다 접속 수, 가입한 날별 표,
 ##   라운드 분포(5라운드씩), 가이드 미션마다 지금 멈춰 있는 수와 그중 며칠째 안 들어온(이탈) 수. 보기만 한다.
+##  신고(2026-11-06) — 채팅 신고(처리 전·전체), 신고된 말(원문)·앞뒤 대화, [채팅 금지] 1시간·1일·7일·영구(두 번 누름), [넘기기], 금지 중 목록 [풀기].
+##  환불(2026-11-06) — 환불 회수한 결제(무엇을 회수했는지·남은 빚), 최근 결제 [회수], 주문 번호로 회수(토스 환불), 구글 환불 지금 확인.
 ## 보상 = 골드·다이아·다이아 모집권·목재·석재·식량·던전 열쇠 셋·영웅(+장 수)·장비(등급 + 개수) — 넣는 값 그대로(서버가 범위를 본다).
 
 const GameData := preload("res://scripts/game_data.gd")
-const TABS := [["status", "상태"], ["notice", "공지"], ["mail", "우편"], ["coupon", "쿠폰"], ["inquiry", "문의"], ["retention", "통계"]]
+const TABS := [["status", "상태"], ["notice", "공지"], ["mail", "우편"], ["coupon", "쿠폰"], ["inquiry", "문의"], ["report", "신고"], ["refund", "환불"], ["retention", "통계"]]
 const KIND_ITEMS := [["notice", "공지"], ["event", "이벤트"], ["update", "업데이트"], ["maintenance", "점검"]]
 const REWARD_FIELDS := [["gold", "골드"], ["diamonds", "다이아"], ["tickets", "모집권"], ["wood", "목재"], ["stone", "석재"], ["food", "식량"],
 	["keys_gold", "골드 열쇠"], ["keys_equip", "장비 열쇠"], ["keys_ticket", "모집권 열쇠"]]
@@ -30,6 +32,10 @@ var inq := {}  # GET /v1/admin/inquiries 응답
 var inq_all := false  # 문의: 전체 보기(아니면 답변 대기만)
 var answering := 0  # 답변 칸을 펼친 문의 id
 var ret := {}  # GET /v1/admin/retention 응답
+var reps := {}  # GET /v1/admin/chat/reports 응답
+var rep_all := false  # 신고: 전체 보기(아니면 처리 전만)
+var expanded_report := 0  # 앞뒤 대화를 펼친 신고 id
+var refs := {}  # GET /v1/admin/refunds 응답
 var _armed := ""  # 한 번 누른 위험 버튼 이름
 var _armed_button: Button
 var _armed_text := ""
@@ -57,6 +63,10 @@ func _on_open() -> void:
 	fetch()
 	if tab == "retention":
 		fetch_retention()
+	if tab == "report":
+		fetch_reports()
+	if tab == "refund":
+		fetch_refunds()
 	_rebuild()
 
 
@@ -68,6 +78,10 @@ func pick(t: String) -> void:
 		fetch_inquiries()
 	if t == "retention":
 		fetch_retention()
+	if t == "report":
+		fetch_reports()
+	if t == "refund":
+		fetch_refunds()
 	_disarm()
 	_rebuild()
 
@@ -127,6 +141,10 @@ func _rebuild() -> void:
 			_build_coupon()
 		"inquiry":
 			_build_inquiry()
+		"report":
+			_build_report()
+		"refund":
+			_build_refund()
 		"retention":
 			_build_retention()
 
@@ -142,7 +160,7 @@ func _build_status() -> void:
 	f.mt_text = line_edit("안내 문구(비우면 기본 문구)", 300)
 	f.mt_text.text = str(m.get("text", ""))
 	v.add_child(f.mt_text)
-	f.mt_min = line_edit("끝나는 예정: 지금부터 몇 분 뒤(비우면 없음)", 6)
+	f.mt_min = line_edit("종료 예정: 지금부터 몇 분 뒤(비우면 없음)", 6)
 	v.add_child(f.mt_min)
 	if m.get("until") != null and float(m.until) > 0.0:
 		v.add_child(_label("지금 예정: " + preload("res://scripts/ops_overlay.gd").clock_text(float(m.until)), 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
@@ -172,6 +190,19 @@ func _build_status() -> void:
 	s.pressed.connect(func(): _save_status({"min_version": f.min_version.text.strip_edges(), "store_url": f.store_url.text.strip_edges()}))
 	w.add_child(s)
 	buttons["save_version"] = s
+
+	# 광고 보상 서버 확인(AdMob SSV): 켜면 AdMob이 서버에 확인해 준 광고만 보상(앱을 고쳐 광고 없이 받기를 막는다).
+	# AdMob 콘솔 보상형 광고 단위에 서버 측 확인 URL을 넣은 뒤에 켠다. 켜면 실제 광고가 없는 앱(토스 미니앱·PC)은 광고 상품을 못 받는다.
+	var ssv := bool(st.get("ad_ssv", false))
+	var a := _card()
+	a.add_child(_label("광고 보상 서버 확인: " + ("켜짐" if ssv else "꺼짐 — 앱이 보낸 '광고 봤음'을 그대로 믿습니다"), 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	a.add_child(_wrap("AdMob 보상형 광고 단위의 서버 측 확인 URL(https://castlerpg-api.onrender.com/admob/ssv)을 넣은 뒤에 켜세요. 켜면 토스 미니앱·PC는 광고 상품을 받지 못합니다.", 22, SUB))
+	var ab := _button("서버 확인 끄기" if ssv else "서버 확인 켜기", UiKit.STEEL if ssv else HudScript.ACCENT, 24)
+	ab.pressed.connect(func():
+		if ssv or _confirm("ad_ssv_on", ab, "한 번 더 누르면 켭니다"):
+			_save_status({"ad_ssv": not ssv}))
+	a.add_child(ab)
+	buttons["ad_ssv"] = ab
 
 
 func _maint_body(on: bool) -> Dictionary:
@@ -483,7 +514,7 @@ func _build_retention() -> void:
 	var d7: Dictionary = ret.get("d7", {})
 	v.add_child(_wrap("하루 뒤 복귀(D1) %s · 일주일 뒤 복귀(D7) %s" % [back_text(d1.get("back"), int(d1.get("n", 0))),
 		back_text(d7.get("back"), int(d7.get("n", 0)))], 23, HudScript.INK))
-	v.add_child(_wrap("최근 30일 가입자 중 가입 다음 날(D1)·7일 뒤 그날(D7)에 한 번이라도 들어온 사람입니다. 숫자 앞은 그날이 지난 가입자 수 중 돌아온 수입니다.", 19, SUB))
+	v.add_child(_wrap("최근 30일 가입자 중 가입 다음 날(D1)이나 가입 7일 뒤(D7)에 다시 들어온 사람의 비율입니다. 앞 숫자는 해당 날짜가 지난 가입자 중 다시 들어온 사람 수입니다.", 19, SUB))
 	var dv := _card()
 	dv.add_child(_label("날마다 접속", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	var daily: Array = ret.get("daily", [])
@@ -507,7 +538,7 @@ func _build_retention() -> void:
 			away_days, int(r.get("away", 0))], 21))
 	var g: Dictionary = ret.get("guide", {})
 	var gv := _card()
-	gv.add_child(_label("가이드 어디서 멈추나", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	gv.add_child(_label("가이드 이탈 지점", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	gv.add_child(_wrap("가이드를 받은 %d명 · 끝까지 %d명 · 진행 중 %d명" % [int(g.get("total", 0)), int(g.get("done", 0)), int(g.get("active", 0))], 23))
 	var worst := 0
 	for s in g.get("steps", []):
@@ -542,7 +573,7 @@ func answer(id: int) -> void:
 		Economy.notice.emit("답변을 적어 주세요")
 		return
 	if not Net.up:
-		Economy.notice.emit("서버에 연결된 뒤 다시 해 주세요")
+		Economy.notice.emit("서버에 연결된 뒤 다시 시도해 주세요")
 		return
 	var back := q.duplicate()
 	var d := {"id": id, "answer": text, "reward": _reward_of("q_")}
@@ -654,7 +685,7 @@ func _reward_of(p: String) -> Dictionary:
 
 func _post(path: String, d: Dictionary, ok_text: String, after := Callable()) -> void:
 	if not Net.up:
-		Economy.notice.emit("서버에 연결된 뒤 다시 해 주세요")
+		Economy.notice.emit("서버에 연결된 뒤 다시 시도해 주세요")
 		return
 	if _posting.has(path):
 		return  # 같은 요청이 응답 전 — 두 번 누름이 우편·공지·쿠폰을 두 번 만들지 않게
@@ -693,3 +724,276 @@ func _option(items: Array) -> OptionButton:
 	o.add_theme_font_size_override("font_size", 22)
 	o.get_popup().add_theme_font_size_override("font_size", 26)
 	return o
+
+
+# --- 신고·채팅 금지(2026-11-06) ---
+
+const MUTE_CHOICES := [[60, "1시간"], [1440, "1일"], [10080, "7일"], [-1, "영구"]]
+const REPORT_STATUS := {"open": "처리 전", "muted": "금지함", "dismissed": "넘김"}
+
+
+func fetch_reports() -> void:
+	if Net.up:
+		Net.send("GET", "/v1/admin/chat/reports" + ("?filter=all" if rep_all else ""), null, func(d: Dictionary):
+			reps = d
+			if tab == "report":
+				_rebuild(), func(): Economy.notice.emit("신고 목록을 받지 못했습니다(관리자만 쓸 수 있습니다)"))
+
+
+static func mute_text(m) -> String:
+	if not (m is Dictionary):
+		return ""
+	if m.get("until") == null:
+		return "영구 금지"
+	return "%s까지 금지" % preload("res://scripts/ops_overlay.gd").clock_text(float(m.until))
+
+
+func _build_report() -> void:
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	top.add_child(_wrap("처리 전 신고 %d개" % int(reps.get("open", 0)), 24))
+	for opt in [[false, "처리 전"], [true, "전체"]]:
+		var b := _button(opt[1], HudScript.ACCENT if rep_all == opt[0] else UiKit.STEEL, 22)
+		b.custom_minimum_size = Vector2(110, 50)
+		b.pressed.connect(func():
+			rep_all = opt[0]
+			fetch_reports()
+			_rebuild())
+		top.add_child(b)
+		buttons["rep_filter:" + opt[1]] = b
+	body.add_child(top)
+	body.add_child(_wrap("신고 내용과 앞뒤 대화를 보고 [채팅 금지]를 누르면 그 성주는 정한 기간 동안 채팅을 못 보내고, 신고된 메시지는 채팅에서 지워집니다. 문제가 없으면 [넘기기].", 19, SUB))
+	var rows: Array = reps.get("reports", [])
+	if rows.is_empty():
+		body.add_child(_wrap("신고가 없습니다", 24, SUB, HORIZONTAL_ALIGNMENT_CENTER))
+	var now := Economy.time_now()
+	for r in rows:
+		var id := int(r.id)
+		var st := str(r.get("status", "open"))
+		var v := _card(Color(1.0, 0.93, 0.90, 0.95) if st == "open" else Color(0.92, 0.92, 0.92, 0.85))
+		v.add_child(_wrap("[%s] %s(%s) ← 신고: %s · %s · %s" % [REPORT_STATUS.get(st, st), str(r.get("target_name", "")), str(r.get("target_code", "")),
+			str(r.get("reporter_name", "")), "전체" if str(r.get("channel", "")) == "all" else "길드", ago(float(r.get("at", now)), now)], 21, HudScript.INK))
+		var raw = r.get("raw")
+		v.add_child(_wrap("\"%s\"" % (str(raw) if raw != null else str(r.get("text", ""))), 24, RED))
+		var info := "이 성주 처리 전 신고 %d개" % int(r.get("target_open", 0))
+		if r.get("muted") is Dictionary:
+			info += " · 지금 " + mute_text(r.muted)
+		v.add_child(_wrap(info, 19, SUB))
+		if expanded_report == id:
+			for m in r.get("context", []):
+				var line = m.get("raw") if m.get("raw") != null else m.get("text", "")
+				var mine: bool = int(m.get("id", 0)) == int(r.get("message_id", 0))
+				v.add_child(_wrap("%s: %s" % [str(m.get("name", "")), str(line)], 19, RED if mine else HudScript.INK))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var ctx := _button("대화 접기" if expanded_report == id else "앞뒤 대화", UiKit.STEEL, 20)
+		ctx.custom_minimum_size = Vector2(150, 50)
+		ctx.pressed.connect(func():
+			expanded_report = 0 if expanded_report == id else id
+			_rebuild())
+		row.add_child(ctx)
+		buttons["rep_ctx:%d" % id] = ctx
+		if st == "open":
+			var dis := _button("넘기기", UiKit.STEEL, 20)
+			dis.custom_minimum_size = Vector2(130, 50)
+			dis.pressed.connect(func(): set_report(id, "dismissed"))
+			row.add_child(dis)
+			buttons["rep_dismiss:%d" % id] = dis
+		elif st == "dismissed":
+			var reopen := _button("다시 열기", UiKit.STEEL, 20)
+			reopen.custom_minimum_size = Vector2(150, 50)
+			reopen.pressed.connect(func(): set_report(id, "open"))
+			row.add_child(reopen)
+		v.add_child(row)
+		var mrow := HBoxContainer.new()
+		mrow.add_theme_constant_override("separation", 6)
+		mrow.add_child(_wrap("채팅 금지", 20, HudScript.INK))
+		for ch in MUTE_CHOICES:
+			var mb := _button(ch[1], Color(0.85, 0.27, 0.22) if int(ch[0]) == -1 else HudScript.ACCENT, 20)
+			mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var target := str(r.get("target", ""))
+			var key := "mute:%d:%d" % [id, int(ch[0])]
+			mb.pressed.connect(func():
+				if _confirm(key, mb, "한 번 더"):
+					mute(target, int(ch[0]), str(r.get("text", ""))))
+			mrow.add_child(mb)
+			buttons[key] = mb
+		v.add_child(mrow)
+	var mutes: Array = reps.get("mutes", [])
+	if not mutes.is_empty():
+		var w := _card()
+		w.add_child(_label("채팅 금지 중 %d명" % mutes.size(), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+		for m in mutes:
+			var row2 := HBoxContainer.new()
+			row2.add_theme_constant_override("separation", 8)
+			var l := _wrap("%s · %s%s" % [str(m.get("code", "")), mute_text(m), (" · " + str(m.reason)) if str(m.get("reason", "")) != "" else ""], 20)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row2.add_child(l)
+			var pid := str(m.get("player", ""))
+			var ub := _button("풀기", UiKit.STEEL, 20)
+			ub.custom_minimum_size = Vector2(100, 50)
+			ub.pressed.connect(func(): mute(pid, 0, ""))
+			row2.add_child(ub)
+			buttons["unmute:" + pid] = ub
+			w.add_child(row2)
+
+
+## 채팅 금지·풀기: 곧바로 목록을 바꿔 보이고(그 성주의 처리 전 신고는 "금지함"), 거절되면 다시 받는다.
+func mute(player: String, minutes: int, reason: String) -> void:
+	if player == "" or not Net.up or _posting.has("mute:" + player):
+		return
+	_posting["mute:" + player] = true
+	var back := reps.duplicate(true)
+	var until = null if minutes == -1 else Economy.time_now() + minutes * 60
+	if minutes != 0:
+		var keep := []
+		for r in reps.get("reports", []):
+			if str(r.get("target", "")) == player and str(r.get("status", "")) == "open":
+				reps.open = maxi(0, int(reps.get("open", 0)) - 1)
+				if not rep_all:
+					continue
+				r.status = "muted"
+			if str(r.get("target", "")) == player:
+				r.muted = {"until": until}
+			keep.append(r)
+		reps.reports = keep
+		var mutes: Array = reps.get("mutes", []).filter(func(m): return str(m.get("player", "")) != player)
+		mutes.push_front({"player": player, "code": player.replace("-", "").substr(0, 8).to_upper(), "reason": reason.substr(0, 40), "until": until})
+		reps.mutes = mutes
+		Economy.notice.emit("채팅을 금지했습니다")
+	else:
+		reps.mutes = reps.get("mutes", []).filter(func(m): return str(m.get("player", "")) != player)
+		Economy.notice.emit("채팅 금지를 풀었습니다")
+	_rebuild()
+	Net.send("POST", "/v1/admin/chat/mute", {"player": player, "minutes": minutes, "reason": reason.substr(0, 40)}, func(_r: Dictionary):
+		_posting.erase("mute:" + player)
+		fetch_reports(), func():
+		_posting.erase("mute:" + player)
+		reps = back
+		Economy.notice.emit("실패했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음"))
+		_rebuild(), true, true)
+
+
+func set_report(id: int, status: String) -> void:
+	if not Net.up:
+		return
+	var back := reps.duplicate(true)
+	var keep := []
+	for r in reps.get("reports", []):
+		if int(r.id) == id:
+			reps.open = maxi(0, int(reps.get("open", 0)) + (1 if status == "open" else -1))
+			r.status = status
+			if status != "open" and not rep_all:
+				continue
+		keep.append(r)
+	reps.reports = keep
+	_rebuild()
+	Net.send("POST", "/v1/admin/chat/report", {"id": id, "status": status}, func(_r: Dictionary): pass, func():
+		reps = back
+		Economy.notice.emit("바꾸지 못했습니다")
+		_rebuild(), true, true)
+
+
+# --- 환불(2026-11-06) ---
+
+func fetch_refunds() -> void:
+	if Net.up:
+		Net.send("GET", "/v1/admin/refunds", null, func(d: Dictionary):
+			refs = d
+			if tab == "refund":
+				_rebuild(), func(): Economy.notice.emit("결제 목록을 받지 못했습니다(관리자만 쓸 수 있습니다)"))
+
+
+static func claw_text(c) -> String:
+	if not (c is Dictionary):
+		return ""
+	if c.has("mail_removed"):
+		return "받기 전 우편을 지움"
+	if str(c.get("note", "")) == "account deleted":
+		return "삭제된 계정"
+	if str(c.get("note", "")) == "not granted":
+		return "지급 전"
+	var parts := ["다이아 %s개 회수" % UiKit.commas(int(c.get("diamonds", 0)))]
+	if int(c.get("debt", 0)) > 0:
+		parts.append("빚 %s개" % UiKit.commas(int(c.debt)))
+	if int(c.get("tickets", 0)) > 0:
+		parts.append("모집권 %d장" % int(c.tickets))
+	if c.has("pass"):
+		parts.append("패스 해제")
+	if c.has("monthly_days"):
+		parts.append("월정액 %d일 줄임" % int(c.monthly_days))
+	return " · ".join(parts)
+
+
+func _build_refund() -> void:
+	var v := _card()
+	v.add_child(_label("결제 환불 회수", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	v.add_child(_wrap("구글 결제 환불은 서버가 한 시간마다 확인해 자동으로 회수합니다. 받은 다이아를 빼앗고, 모자라면 앞으로 얻는 다이아에서 먼저 차감합니다(빚). 받기 전 우편이면 우편만 지웁니다. 토스 환불은 아래에 주문 번호를 넣어 회수하세요.", 19, SUB))
+	var sync := _button("구글 환불 지금 확인", HudScript.ACCENT if bool(refs.get("google_sync", false)) else UiKit.STEEL, 22)
+	sync.pressed.connect(func():
+		if not bool(refs.get("google_sync", false)):
+			Economy.notice.emit("구글 결제가 연결되지 않았습니다")
+			return
+		_post("/v1/admin/refunds/sync", {}, "확인했습니다", fetch_refunds))
+	v.add_child(sync)
+	buttons["refund_sync"] = sync
+	f.refund_id = line_edit("주문 번호(GPA.… 또는 토스 주문 번호)", 200)
+	v.add_child(f.refund_id)
+	var go := _button("이 주문 환불 회수", Color(0.85, 0.27, 0.22), 22)
+	go.pressed.connect(func():
+		var oid: String = f.refund_id.text.strip_edges()
+		if oid == "":
+			Economy.notice.emit("주문 번호를 넣어 주세요")
+		elif _confirm("refund_manual", go, "한 번 더 누르면 회수합니다"):
+			refund(oid))
+	v.add_child(go)
+	buttons["refund_manual"] = go
+	var now := Economy.time_now()
+	var rs: Array = refs.get("refunds", [])
+	var w := _card()
+	w.add_child(_label("환불 회수한 결제 %d건" % rs.size(), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	for r in rs:
+		w.add_child(_wrap("%s · %s · %s원 · %s" % [str(r.get("code", "")), str(r.get("name", "")), UiKit.commas(int(r.krw)) if r.get("krw") != null else "-",
+			ago(float(r.get("refunded_at", now)), now)], 21, HudScript.INK))
+		var t := claw_text(r.get("clawback"))
+		if int(r.get("debt", 0)) > 0:
+			t += " · 남은 빚 %s개" % UiKit.commas(int(r.debt))
+		w.add_child(_wrap(t, 19, SUB))
+	var os: Array = refs.get("orders", [])
+	var o := _card()
+	o.add_child(_label("최근 결제 %d건" % os.size(), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	for r in os:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var l := _wrap("%s · %s · %s · %s\n%s" % [str(r.get("code", "")), str(r.get("name", "")), "구글" if str(r.get("provider", "")) == "google" else "토스",
+			ago(float(r.get("at", now)), now), str(r.get("order_id", ""))], 19)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(l)
+		var oid := str(r.get("order_id", ""))
+		var b := _button("회수", UiKit.STEEL, 20)
+		b.custom_minimum_size = Vector2(90, 0)
+		b.pressed.connect(func():
+			if _confirm("refund:" + oid, b, "한 번 더"):
+				refund(oid))
+		row.add_child(b)
+		buttons["refund:" + oid] = b
+		o.add_child(row)
+
+
+## 주문 하나 환불 회수: 곧바로 최근 결제에서 빼고, 서버 결과(무엇을 회수했는지)로 목록을 다시 받는다. 거절되면 되돌린다.
+func refund(order_id: String) -> void:
+	if not Net.up or _posting.has("refund:" + order_id):
+		return
+	_posting["refund:" + order_id] = true
+	var back := refs.duplicate(true)
+	refs.orders = refs.get("orders", []).filter(func(r): return str(r.get("order_id", "")) != order_id)
+	_rebuild()
+	Net.send("POST", "/v1/admin/refund", {"order_id": order_id}, func(r: Dictionary):
+		_posting.erase("refund:" + order_id)
+		Economy.notice.emit("회수했습니다: " + claw_text(r.get("clawback")))
+		fetch_refunds(), func():
+		_posting.erase("refund:" + order_id)
+		refs = back
+		var why := {"already_refunded": "이미 회수한 주문입니다", "unknown_order": "그 주문 번호를 찾지 못했습니다"}
+		Economy.notice.emit(why.get(Net.last_error, "실패했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음")))
+		_rebuild(), true, true)

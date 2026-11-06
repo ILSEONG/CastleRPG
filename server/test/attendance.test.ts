@@ -32,10 +32,9 @@ test('표·진행 조회: 28칸, 새 플레이어는 0일 + 받을 수 있음, /
 test('하루 한 번: 1일차 골드, 같은 날 다시는 claimed, 재전송은 stale, 다음 날 2일차 모집권', async () => {
   S.clock.t = T0
   const { token } = await S.login()
-  const before = (await S.req('GET', '/v1/player', { token })).json.player.gold_tenths
   const r = await claim(token, 1)
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.gold_tenths, before + A.REWARDS[0].gold! * 10)
+  assert.deepEqual(r.json.player.pouches, { gold_30: 2 }) // 골드는 주머니로(2026-11-06)
   assert.deepEqual(r.json.player.attendance, { n: 1, days: 28, can_claim: false })
   assert.equal((await claim(token, 2)).json.error, 'claimed')
   assert.equal((await claim(token, 1)).json.error, 'stale')

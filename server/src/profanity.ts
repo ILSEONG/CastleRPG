@@ -62,6 +62,8 @@ export function skeleton(text: string): Unit[] {
       if (t) push(t, i, 'T')
     } else if (code >= 0x3131 && code <= 0x3163) {
       push(c, i, 'J')
+    } else if (code >= 0x1100 && code <= 0x1112) {
+      push(L[code - 0x1100], i, 'J') // 첫가끝 초성 낱자(ᄉᄇ 등 — 호환 자모와 같게 본다, 2026-11-06 보안 점검)
     } else if (isLatin(c)) {
       out.push({ ch: c.toLowerCase(), at: i, kind: 'A' })
     } else if (LEET[c] && (isLatin(chars[i - 1] ?? '') || isLatin(chars[i + 1] ?? ''))) {

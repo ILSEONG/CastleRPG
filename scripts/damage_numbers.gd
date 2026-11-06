@@ -5,7 +5,7 @@ extends Node2D
 ##  - 이름 띠(banner, 액티브·한 판 한 번 패시브): 머리 위 깎인 모서리 상자(영웅 색, 어두운 테두리) + 스킬 그림 + 흰 이름, 1.2초.
 ##    상대 팀(team 1)은 작게 + 어두운 바탕·붉은 테두리. 띠끼리 겹치면 위로 밀고, 화면 밖으로 나가지 않게 안으로 들인다.
 ##  - 확률 패시브(text = ""): 이름 없이 스킬 그림 동그라미만 0.8초.
-##  - 컷인(cutin, 우리 편 SSR): 화면 왼쪽 가운데로 스킬 이름 띠가 미끄러져 들어왔다 나간다. 한 번에 하나 — 떠 있으면 줄 서서 이어 나온다
+##  - 컷인(cutin, 우리 편 SSR): 화면 왼쪽 위에 스킬 이름 띠가 제자리에서 나타났다 흐려진다(2026-11-06부터 움직이지 않는다). 한 번에 하나 — 떠 있으면 줄 서서 이어 나온다
 ##    (2026-10-14 사용자 "SSR은 스킬 쓸 때 나오는게 있고 안나오는게 있어, 다 나오는게 맞아": 예전엔 5초 간격에 걸린 것을 버렸다).
 ##    궁극기는 늘, 다른 발동 스킬은 같은 영웅이 CUTIN_HERO_GAP초 안에 컷인을 안 띄웠을 때만(궁극기가 조건부라 드문 루미나·발두르도 나오게).
 ##    2026-10-13 개편: 띠·창은 로우폴리 면(면마다 밝기 조금씩), 속도선 대신 뾰족한 조각, 위아래 금 테, 외곽선은 같은 색을 어둡게.
@@ -57,10 +57,10 @@ const CUTIN_H := 128.0  # 띠 높이
 const CUTIN_POP := 54.0  # 금빛 창이 띠 위로 솟는 높이(위 정보 패널 아래까지만)
 const CUTIN_PANEL := 236.0  # 금빛 창(띠 왼쪽 부분) 윗변 폭
 const CUTIN_FRAME := 9.0  # 일러스트 둘레 금빛 창 테두리 두께(빛살이 보이는 곳)
-const CUTIN_RAYS := 12  # 금빛 창 빛살 수(천천히 돈다)
+const CUTIN_RAYS := 12  # 금빛 창 빛살 수(멈춰 있다 — 2026-11-06 사용자 "움직이지마")
 const CUTIN_SSR := Color(0.93, 0.66, 0.18)  # 금빛 창: SSR 등급 금색 계열(SSR 카드 창과 같은 결)
 const CUTIN_NIGHT := Color(0.25, 0.22, 0.42)  # 금·흰 빛 영웅(일러스트가 금빛 창에 묻힌다 — pale_hero) 창: 짙은 남보라 + 금빛 빛살
-const CUTIN_ZOOM := [1.16, 1.06]  # 일러스트 확대: 들어올 때 → 끝날 때(천천히 물러나며 움직임)
+const CUTIN_ZOOM := 1.1  # 일러스트 확대(고정 — 2026-11-06 사용자 "일러스트는 움직이지마": 당겼다 물러나던 움직임을 뺐다)
 const CUTIN_CELL := 84.0  # 띠 로우폴리 면 한 칸 폭(px)
 const CUTIN_SLANT := 40.0  # 기울어진 오른쪽 변의 가로 폭
 const CUTIN_GOLD := Color(0.96, 0.78, 0.32)
@@ -356,19 +356,18 @@ func _badge(at: Vector2, r: float, skill: String, alpha: float) -> void:
 	SkillIcons.draw_badge(self, skill, at, r, false, alpha)
 
 
-## 컷인: 왼쪽에서 기울어진 띠가 미끄러져 들어와 띠 위로 솟은 금빛 창 속 영웅 일러스트 + 영웅 이름 + 스킬 그림·이름을 보이고 왼쪽으로 빠진다.
+## 컷인: 기울어진 띠가 제자리에서 나타나 띠 위로 솟은 금빛 창 속 영웅 일러스트 + 영웅 이름 + 스킬 그림·이름을 보이고 흐려진다(움직이지 않는다 — 2026-11-06).
 ## 그리는 순서: 띠 면 → 조각 → 금빛 창 면·빛살 → 위 금 테·외곽선 → 일러스트(창 안쪽, 깎은 오른위 모서리) → 아래 금 테 → 글자.
 func _draw_cutin() -> void:
 	var vs := get_viewport_rect().size
 	var age: float = _cut.age
 	var x := 0.0
 	var alpha := 1.0
+	# 2026-11-06 사용자 "좌측 상단 일러스트는 움직이지마 정신사나와": 미끄러져 들어오고 나가던 것 → 제자리에서 나타났다 흐려진다
 	if age < CUTIN_IN:
-		x = -vs.x * (1.0 - ease(age / CUTIN_IN, 0.35))
+		alpha = ease(age / CUTIN_IN, 0.5)
 	elif age > _cut.life - CUTIN_OUT:
-		var k := clampf((age - (_cut.life - CUTIN_OUT)) / CUTIN_OUT, 0.0, 1.0)
-		x = -vs.x * ease(k, 2.4)
-		alpha = 1.0 - k
+		alpha = 1.0 - clampf((age - (_cut.life - CUTIN_OUT)) / CUTIN_OUT, 0.0, 1.0)
 	var y0 := roundf(vs.y * CUTIN_Y)
 	var y1 := y0 + CUTIN_H
 	var bw := minf(vs.x * 0.9, 660.0)
@@ -391,7 +390,7 @@ func _draw_cutin() -> void:
 	var c := Vector2(x + pw * 0.45, (top + y1) * 0.5)
 	var reach := pw * 1.5
 	for i in CUTIN_RAYS:
-		var a := age * 0.9 + TAU * i / CUTIN_RAYS
+		var a := TAU * i / CUTIN_RAYS  # 빛살은 멈춰 있다(2026-11-06)
 		var ray := PackedVector2Array([c, c + Vector2.from_angle(a) * reach, c + Vector2.from_angle(a + TAU / CUTIN_RAYS * 0.45) * reach])
 		for part in Geometry2D.intersect_polygons(ray, panel):
 			draw_colored_polygon(part, Color(CUTIN_SSR.lightened(0.6), 0.5 * alpha))
@@ -401,7 +400,7 @@ func _draw_cutin() -> void:
 	_trim(Vector2(x, top - 1.0), Vector2(x + pw + 1.6, top - 1.0), 5.0, alpha)
 	var pe := PackedVector2Array([panel[0], panel[1], panel[2]])
 	draw_polyline(pe, Color(LowpolyBox.edge_color(pc), alpha), 2.5, true)
-	# 일러스트: 창 안쪽(위·오른쪽·아래 CUTIN_FRAME, 왼쪽은 화면 끝), 오른위 모서리 깎음. 들어올 때 조금 당겨 있다가 천천히 물러난다
+	# 일러스트: 창 안쪽(위·오른쪽·아래 CUTIN_FRAME, 왼쪽은 화면 끝), 오른위 모서리 깎음. 움직이지 않는다
 	var f := CUTIN_FRAME
 	var wt := top + f + 5.0  # 위 금 테 아래
 	var wb := y1 - f - 2.0
@@ -410,11 +409,8 @@ func _draw_cutin() -> void:
 	var win := PackedVector2Array([Vector2(x - 2.0, wt), Vector2(xr.call(wt) - ch, wt), Vector2(xr.call(wt + ch), wt + ch),
 		Vector2(xr.call(wb), wb), Vector2(x - 2.0, wb)])
 	var wr := Rect2(x - 2.0, wt, xr.call(wt) + 2.0 - x, wb - wt)
-	var zoom: float = lerpf(CUTIN_ZOOM[0], CUTIN_ZOOM[1], clampf(age / _cut.life, 0.0, 1.0))
-	if HeroArt.draw_in(self, _cut.hero, win, wr, 0.34, zoom):
-		if alpha < 1.0:
-			draw_colored_polygon(win, Color(band, 1.0 - alpha))  # 빠질 때 그림도 흐려지게
-	else:
+	var zoom: float = CUTIN_ZOOM  # 확대도 고정(2026-11-06)
+	if not HeroArt.draw_in(self, _cut.hero, win, wr, 0.34, zoom, alpha):  # 나타나고 흐려질 때 그림도 같이(제자리에서)
 		draw_colored_polygon(win, Color(band.darkened(0.3), alpha))
 		_badge(wr.get_center(), 44.0, _cut.skill, alpha)
 	var wl := win.duplicate()

@@ -112,6 +112,7 @@ func _refresh() -> void:
 	var waiting := Economy.upgrades_waiting()
 	for id in rows:
 		var r: Dictionary = rows[id]
+		r.row.visible = not GameData.upgrade_locked(id, Economy.upgrades)  # 고급·최고급·초월 성장은 아래 단계가 다 만렙이 된 뒤에만 보인다
 		var u := GameData.upgrade_def(id)
 		var lv := Economy.upgrade_level(id)
 		var mx := int(u.max_level)
@@ -138,7 +139,7 @@ static func effect_text(v: float, unit: String) -> String:
 func _row(u: Dictionary) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	row.add_child(_icon(ICONS.get(u.id, "")))
+	row.add_child(_icon(ICONS.get(GameData.upgrade_base_id(str(u.id)), "")))
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -156,7 +157,7 @@ func _row(u: Dictionary) -> Control:
 	var ten := _cost_button("×10", 140.0)
 	ten.button.pressed.connect(press_ten.bind(u.id))
 	row.add_child(ten.button)
-	rows[u.id] = {"lv": lv, "effect": effect, "up": up, "ten": ten}
+	rows[u.id] = {"row": row, "lv": lv, "effect": effect, "up": up, "ten": ten}
 	return row
 
 

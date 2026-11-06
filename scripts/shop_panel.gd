@@ -31,17 +31,19 @@ const AdPlayer := preload("res://scripts/ad_player.gd")
 
 const GROUP_SHOP := "shop_panel"
 static var TABS := [["package", Lang.t("shop_panel.tabs")], ["pass", Lang.t("shop_panel.tabs_2")], ["ad", Lang.t("shop_panel.tabs_3")], ["daily", Lang.t("shop_panel.tabs_4")], ["weekly", Lang.t("shop_panel.tabs_5")], ["pvp", "PVP"], ["diamond", Lang.t("shop_panel.tabs_6")]]
-static var HEAD := {"package": Lang.t("shop_panel.head.package"), "pass": Lang.t("shop_panel.head.pass"), "daily": Lang.t("shop_panel.head.daily"), "ad": Lang.t("shop_panel.head.ad"),
+static var HEAD := {"package": Lang.t("shop_panel.head.package"), "daily": Lang.t("shop_panel.head.daily"), "ad": Lang.t("shop_panel.head.ad"),
 	"weekly": Lang.t("shop_panel.head.weekly"), "diamond": Lang.t("shop_panel.head.diamond"),
 	"pvp": Lang.t("shop_panel.head.pvp")}
 static var NOTE_TEXT := Lang.t("shop_panel.note_text")
 static var SOLD_TEXT := Lang.t("shop_panel.sold_text")
+static var MAIL_TEXT := Lang.t("shop_panel.mail_text")
 static var FREE_TEXT := Lang.t("shop_panel.free_text")
 static var AD_TEXT := Lang.t("shop_panel.ad_text")
 static var AD_FREE_TEXT := Lang.t("shop_panel.ad_free_text")  # 광고 제거 구매자
 static var SHORT_TEXT := {"diamonds": Lang.t("shop_panel.short_text.diamonds"), "gold": Lang.t("shop_panel.short_text.gold")}
 const PILE := [Vector2(0, 0), Vector2(-26, 14), Vector2(26, 14), Vector2(0, 26), Vector2(-14, -18), Vector2(14, -18)]  # 보석 더미 자리(가운데 기준)
-const PASS_COL := Color(0.55, 0.30, 0.70)  # 성장 패스 유료 칸 글자
+const PASS_COL := Color(0.55, 0.30, 0.70)  # 패스 유료 칸 글자·경계선
+const PASS_BG := Color(0.93, 0.87, 0.98, 0.95)  # 패스 유료 칸 바탕
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const CARD_BG := Color(1, 1, 1, 0.78)
 const FREE_BG := Color(0.99, 0.90, 0.62, 0.92)
@@ -49,13 +51,14 @@ const SOLD_BG := Color(0.86, 0.87, 0.89, 0.7)
 const GIVE := Color(0.13, 0.50, 0.24)
 const RED := Color(0.88, 0.22, 0.2)
 const CLOSE_PX := 56.0
-const CARD_W := 316.0
+const CARD_W := 300.0  # 두 칸 + 간격 10 + 세로 스크롤 막대가 시트 안(628)에 들어가게 — 넘치면 탭마다 창 너비가 바뀐다(2026-11-05 "양피지 너비")
 
 var tab := "package"
+var pass_tab := "growth"  # [패스] 탭 안의 하위 탭: "growth"(성장 패스)·"keep"(성채 레벨 패스)
 var body: VBoxContainer
 var head_label: Label
 var wallet_label: Label
-var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "iap:<상품 id>", "monthly:<id>", "growth:<단계>:<free|paid>", "close"
+var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "iap:<상품 id>", "growth:<단계>:<free|paid>", "keep:<단계>:<free|paid>", "pass:growth"·"pass:keep"(패스 하위 탭), "close"
 var buy_buttons: Array = []  # 다이아 탭 충전 버튼들
 var note: Label
 var ad_player: Control  # 보상형 광고 화면(ad_player.gd)
@@ -202,13 +205,7 @@ func _hot_time() -> void:
 
 func _head() -> void:
 	_hot_time()
-	if not tab in ["daily", "weekly", "ad"]:
-		head_label.text = HEAD.get(tab, "")
-		return
-	var per := Economy.shop_period()
-	var hour := GameData.config_num("daily_reset_utc_hour") * 3600.0
-	var at: float = (int(per[0]) + 1) * 86400.0 + hour if tab != "weekly" else ((int(per[1]) + 1) * 7 - 4) * 86400.0 + hour
-	head_label.text = Lang.t("shop_panel.head") % [HEAD[tab], UiKit.duration(maxf(0.0, at - Economy.time_now()))]
+	head_label.text = HEAD.get(tab, "")  # 광고·일일·주간·PVP는 초기화 문구만(2026-11-05 사용자 — 남은 시간·"광고를 보면 무료" 없이)
 
 
 func _wallet() -> void:
@@ -220,7 +217,7 @@ func _wallet() -> void:
 
 ## 보이는 카드의 상태(남은 횟수·살 수 있는지) — 같으면 카드를 다시 만들지 않는다(누르는 도중 버튼이 바뀌지 않게).
 func _signature() -> String:
-	var parts := [tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0, str(Economy.active_hot().get("id", ""))]
+	var parts := [tab, pass_tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0, str(Economy.active_hot().get("id", ""))]
 	if tab == "pvp":
 		parts.append(str(Pvp.coins()))
 		for x in PvpRules.SHOP:
@@ -352,10 +349,17 @@ func _buy(id: String) -> void:
 	if x.get("currency") == "ad" and not Economy.ad_free():
 		ad_player.play(func(ad_token: String):
 			if Economy.buy_shop(id, true, ad_token):
-				Economy.notice.emit(Lang.t("shop_panel.buy") + Missions.reward_text(x.give)))
+				Economy.notice.emit(_bought_text(x)))
 		return
 	if Economy.buy_shop(id):
-		Economy.notice.emit((Lang.t("shop_panel.buy") if x.get("currency") == "ad" else Lang.t("shop_panel.buy_2")) + Missions.reward_text(x.give))
+		Economy.notice.emit(_bought_text(x))
+
+
+## 산 뒤 알림: 온라인은 우편으로 간다(2026-11-05 사용자 "상점에서 파는 재화는 무료든 유료든 먼저 우편으로 보내").
+static func _bought_text(x: Dictionary) -> String:
+	if Net.is_online():
+		return MAIL_TEXT + Missions.reward_text(x.give)
+	return (Lang.t("shop_panel.buy") if x.get("currency") == "ad" else Lang.t("shop_panel.buy_2")) + Missions.reward_text(x.give)
 
 
 ## PVP 상품 카드(_card와 같은 모양, 가격 = PVP 코인).
@@ -406,8 +410,7 @@ func _pvp_card(x: Dictionary) -> Control:
 	b.pressed.connect(func():
 		if not UiKit.tap_once("pvp_shop:" + id):
 			return  # 빠른 두 번 누름(한 번만 산다)
-		if Pvp.buy(id) == "":
-			Economy.notice.emit(Lang.t("shop_panel.pvp_card_3") + str(PvpRules.SHOP_NAMES.get(id, id))))
+		Pvp.buy(id))  # 알림은 Pvp가(서버 응답 — 우편으로 보냈는지)
 	v.add_child(b)
 	buttons["buy:pvp_" + id] = b
 	return card
@@ -536,15 +539,8 @@ func _build_packages() -> void:
 		var lines := [[Lang.t("shop_panel.build_packages_3") + Missions.reward_text(p.give), GIVE], [Lang.t("shop_panel.build_packages_4") % [int(p.days), Missions.reward_text(p.daily)], GIVE]]
 		lines.append([Lang.t("shop_panel.build_packages_5") % left if left > 0 else Lang.t("shop_panel.build_packages_6") % _value_text(p), SUB])
 		var side := []
-		if left > 0:
-			if Economy.can_claim_monthly(p.id):
-				var c := _button(Lang.t("shop_panel.build_packages_7"), UiKit.AMBER, 22)
-				c.focus_mode = Control.FOCUS_NONE
-				c.pressed.connect(func(): Economy.claim_monthly(p.id))
-				buttons["monthly:" + p.id] = c
-				side.append(c)
-			else:
-				side.append(_label(Lang.t("shop_panel.build_packages_8"), 20, SUB))
+		if left > 0:  # 매일 보상은 그날 처음 우편함을 볼 때 우편으로 온다(2026-11-05 사용자 "월정액도 일단 우편으로 보내")
+			side.append(_label(Lang.t("shop_panel.build_packages_14"), 20, GIVE))
 		if Economy.iap_can_buy(p.id):
 			side.append(_krw_button(p.id, int(p.krw), (Lang.t("shop_panel.build_packages_9") if left > 0 else "₩") + UiKit.commas(int(p.krw))))
 		body.add_child(_wide(str(ShopArt.PACK_ICONS.get(p.id, "crown")), p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
@@ -572,29 +568,103 @@ func _value_text(p: Dictionary) -> String:
 	return Lang.t("shop_panel.value_text") % UiKit.commas(dia)
 
 
+## [패스] 탭: 하위 탭 [성장 패스][성채 레벨 패스] 중 고른 패스 하나만(2026-11-06 사용자 "패스 하위 탭으로 구분지어 밑으로 늘어뜨리지 말고").
+## 성장 패스 = 깬 라운드, 성채 레벨 패스 = 성채 레벨. 표마다 [무료] 칸과 [패스] 칸 사이에 세로 경계선, 패스 칸은 보라 바탕.
 func _build_pass() -> void:
-	var owned := Economy.has_pass("pass_growth")
-	var p := IapItems.find("pass_growth")
-	var side := [_label(Lang.t("shop_panel.build_pass"), 22, GIVE)] if owned else [_krw_button(p.id, int(p.krw))]
-	body.add_child(_wide("crown", Lang.t("shop_panel.build_pass_2"), [[Lang.t("shop_panel.build_pass_3"), SUB],
-		[Lang.t("shop_panel.build_pass_4"), SUB]], side, FREE_BG if owned else CARD_BG))
+	var subs := HBoxContainer.new()
+	subs.add_theme_constant_override("separation", 8)
+	body.add_child(subs)
+	for sub in [["growth", "pass_growth"], ["keep", "pass_keep"]]:
+		var id: String = sub[0]
+		var b := _button(str(IapItems.find(sub[1]).name), UiKit.AMBER if id == pass_tab else UiKit.STEEL, 22)
+		b.focus_mode = Control.FOCUS_NONE
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 50)
+		b.pressed.connect(func(): _pick_pass(id))
+		var dot := Control.new()  # 받을 보상이 남은 패스는 빨간 점
+		dot.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if pass_dot(id):
+			dot.draw.connect(func():
+				var p := Vector2(dot.size.x - 12, 12)
+				dot.draw_circle(p, 9.0, RED)
+				dot.draw_arc(p, 9.0, 0, TAU, 16, RED.darkened(0.3), 1.5, true))
+		b.add_child(dot)
+		subs.add_child(b)
+		buttons["pass:" + id] = b
+	if pass_tab == "keep":
+		var kl := Economy.building_level(GameData.KEEP)
+		_pass_table("pass_keep", IapItems.KEEP, func(t): return "Lv %d" % int(t.level), func(t): return kl >= int(t.level),
+			func(i, track): return Economy.iap_view().kp[track].has(i) or Economy.iap_view().kp[track].has(float(i)),
+			func(i, track): return Economy.can_claim_keep(i, track), func(i, track): Economy.claim_keep(i, track), "keep")
+	else:
+		var c := cleared()
+		_pass_table("pass_growth", IapItems.GROWTH, func(t): return GameData.round_label(int(t.round)), func(t): return c >= int(t.round),
+			func(i, track): return Economy.iap_view().gp[track].has(i) or Economy.iap_view().gp[track].has(float(i)),
+			func(i, track): return Economy.can_claim_growth(i, track, cleared()), func(i, track): Economy.claim_growth(i, track, cleared()), "growth")
+	_add_note()
+
+
+func _pick_pass(id: String) -> void:
+	if id == pass_tab:
+		return
+	pass_tab = id
+	_rebuild()
+	var sc := body.get_parent() as ScrollContainer
+	if sc != null:
+		sc.scroll_vertical = 0
+
+
+## 그 패스에 지금 받을 보상이 있다(하위 탭 빨간 점).
+static func pass_dot(id: String) -> bool:
+	if id == "keep":
+		for i in IapItems.KEEP.size():
+			if Economy.can_claim_keep(i, "free") or Economy.can_claim_keep(i, "paid"):
+				return true
+		return false
 	var c := cleared()
-	body.add_child(_pass_head())
 	for i in IapItems.GROWTH.size():
-		var t: Dictionary = IapItems.GROWTH[i]
+		if Economy.can_claim_growth(i, "free", c) or Economy.can_claim_growth(i, "paid", c):
+			return true
+	return false
+
+
+## 패스 하나: 이름 카드([₩] 또는 "구매함") + 머리줄 + 단계 줄들. key = 테스트 버튼 이름 앞머리("growth"·"keep").
+func _pass_table(pid: String, rows: Array, label: Callable, reached: Callable, claimed: Callable, can: Callable, claim: Callable, key: String) -> void:
+	var owned := Economy.has_pass(pid)
+	var p := IapItems.find(pid)
+	var side := [_label(Lang.t("shop_panel.build_pass"), 22, GIVE)] if owned else [_krw_button(p.id, int(p.krw))]
+	body.add_child(_wide("crown", str(p.name), [[Lang.t("shop_panel.build_pass_4"), SUB]], side, FREE_BG if owned else CARD_BG))
+	body.add_child(_pass_head(key))
+	for i in rows.size():
+		var t: Dictionary = rows[i]
+		var on: bool = reached.call(t)
 		var card := PanelContainer.new()
-		var reached := c >= int(t.round)
-		card.add_theme_stylebox_override("panel", UiKit.panel(CARD_BG if reached else SOLD_BG, 10.0, 8))
+		card.add_theme_stylebox_override("panel", UiKit.panel(CARD_BG if on else SOLD_BG, 10.0, 8))
 		var r := HBoxContainer.new()
 		r.add_theme_constant_override("separation", 8)
 		card.add_child(r)
-		var lab := _label(GameData.round_label(int(t.round)), 26, HudScript.INK if reached else SUB)
+		var lab := _label(str(label.call(t)), 26, HudScript.INK if on else SUB)
 		lab.custom_minimum_size = Vector2(96, 0)
 		r.add_child(lab)
-		for track in ["free", "paid"]:
-			r.add_child(_growth_cell(i, track, t[track], owned))
+		r.add_child(_pass_cell(i, "free", t.free, owned, claimed, can, claim, key))
+		r.add_child(_pass_divider())
+		var paid := PanelContainer.new()  # 패스 칸: 보라 바탕
+		paid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		paid.add_theme_stylebox_override("panel", UiKit.panel(PASS_BG, 8.0, 6))
+		paid.add_child(_pass_cell(i, "paid", t.paid, owned, claimed, can, claim, key))
+		r.add_child(paid)
 		body.add_child(card)
-	_add_note()
+
+
+## [무료]·[패스] 칸 사이 세로 경계선.
+func _pass_divider() -> Control:
+	var line := ColorRect.new()
+	line.color = PASS_COL
+	line.custom_minimum_size = Vector2(3, 0)
+	line.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return line
 
 
 ## 유료 탭(다이아·패키지·패스) 맨 아래 청약 철회 안내(2026-11-03 출시 전 법률 점검): 전자상거래법 제17조 — 철회가 제한되는 상품은 구매 화면에 알린다(이용약관 제6조와 같은 내용).
@@ -604,37 +674,41 @@ func _add_note() -> void:
 	body.add_child(note)
 
 
-## 성장 패스 표 머리줄(사용자 2026-10-12): 단계 칸 · [무료] · [패스] — 칸마다 "무료 ·"/"패스 ·"를 붙이지 않는다. 열 너비는 아래 줄과 같다.
-func _pass_head() -> Control:
+## 패스 표 머리줄(사용자 2026-10-12): 단계 칸 · [무료] · 경계선 · [패스] — 칸마다 "무료 ·"/"패스 ·"를 붙이지 않는다. 열 너비는 아래 줄과 같다.
+func _pass_head(key: String) -> Control:
 	var head := PanelContainer.new()
 	head.add_theme_stylebox_override("panel", UiKit.panel(Color(0.30, 0.34, 0.46, 0.92), 10.0, 8))
 	var r := HBoxContainer.new()
 	r.add_theme_constant_override("separation", 8)
 	head.add_child(r)
-	var lab := _label(Lang.t("shop_panel.pass_head"), 22, Color.WHITE)
+	var lab := _label(Lang.t("shop_panel.pass_head") if key == "growth" else Lang.t("shop_panel.pass_head_4"), 22, Color.WHITE)
 	lab.custom_minimum_size = Vector2(96, 0)
 	r.add_child(lab)
-	for pair in [[Lang.t("shop_panel.pass_head_2"), Color(0.62, 0.92, 0.62)], [Lang.t("shop_panel.pass_head_3"), Color(0.86, 0.70, 1.0)]]:
-		var l := _label(pair[0], 24, pair[1])
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		r.add_child(l)
+	var free := _label(Lang.t("shop_panel.pass_head_2"), 24, Color(0.62, 0.92, 0.62))
+	free.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r.add_child(free)
+	r.add_child(_pass_divider())
+	var paid := _label(Lang.t("shop_panel.pass_head_3"), 24, Color(0.86, 0.70, 1.0))
+	paid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r.add_child(paid)
 	return head
 
 
-func _growth_cell(i: int, track: String, reward: Dictionary, owned: bool) -> Control:
+func _pass_cell(i: int, track: String, reward: Dictionary, owned: bool, claimed: Callable, can: Callable, claim: Callable, key: String) -> Control:
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_theme_constant_override("separation", 2)
-	v.add_child(_label(Missions.reward_text(reward), 17, GIVE if track == "free" else PASS_COL))
-	var done: bool = Economy.iap_view().gp[track].has(i) or Economy.iap_view().gp[track].has(float(i))
-	if done:
+	var rw := _label(Missions.reward_text(reward), 17, GIVE if track == "free" else PASS_COL)
+	rw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 긴 보상은 줄을 바꾼다(한 줄로 두면 표가 시트보다 넓어진다)
+	v.add_child(rw)
+	if claimed.call(i, track):
 		v.add_child(_label(Lang.t("shop_panel.growth_cell"), 20, SUB))
-	elif Economy.can_claim_growth(i, track, cleared()):
+	elif can.call(i, track):
 		var b := _button(Lang.t("shop_panel.growth_cell_2"), UiKit.AMBER, 20)
 		b.focus_mode = Control.FOCUS_NONE
 		b.custom_minimum_size = Vector2(0, 44)
-		b.pressed.connect(func(): Economy.claim_growth(i, track, cleared()))
-		buttons["growth:%d:%s" % [i, track]] = b
+		b.pressed.connect(func(): claim.call(i, track))
+		buttons["%s:%d:%s" % [key, i, track]] = b
 		v.add_child(b)
 	else:
 		v.add_child(_label(Lang.t("shop_panel.growth_cell_3") if track == "paid" and not owned else Lang.t("shop_panel.growth_cell_4"), 18, SUB))

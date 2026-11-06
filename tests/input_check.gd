@@ -333,7 +333,7 @@ func _run() -> void:
 	await _frames(2)
 	var rate: float = Economy.current_rate("wood", Time.get_unix_time_from_system())
 	var expect := Economy.sell_value("wood", 2000, rate)
-	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("다음 시세까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
+	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("시세 갱신까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
 	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
 	await _tap(bp)  # [판매] → 수량 칸이 펼쳐진다. [최대] → [선택 판매]로 전량
 	await _tap(panel.qty_max["wood"].get_global_rect().get_center())
@@ -775,9 +775,9 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _promotion_ui(heroes_win, recruit)
 	await _skill_unlock_ui(heroes_win)
 	await _guard_wait()  # _figures가 창을 다시 열어 0.4초 보호가 다시 걸린다
-	await _tap(heroes_win.prev_button.get_parent().get_child(1).get_global_rect().get_center())  # [닫기]
+	heroes_win._show_list()  # 2026-11-05: 상세의 [닫기]는 없어졌다(오른쪽 위 X가 시트를 닫는다 — 아래 (x))
 	_check(heroes_win.is_open() and not heroes_win.is_showing_detail() and heroes_win.is_guarded() and heroes_win.hero_cards.arteon.level == 5,
-		"(x) [닫기] returns to the list (guarded); the card shows Lv 5", "")
+		"(x) back on the list (guarded) the card shows Lv 5", "")
 	await _guard_wait()
 	await _tap(Vector2(30, 40))  # 위 칩 줄 높이 — 시트 바깥 배경
 	_check(not heroes_win.is_open() and tabs.selected == "", "(x) a backdrop tap above the sheet closes it and no tab is selected", "")
@@ -1229,14 +1229,14 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"held=%s open=%s wood=%d" % [held, bwin.is_open(), Economy.res.wood])
 	await _guard_wait()
 	var cam0: Vector3 = rig.position
-	await _tap(bwin.content.get_child(bwin.content.get_child_count() - 1).get_global_rect().get_center())  # [닫기]
+	await _tap(bwin.close_x.get_global_rect().get_center())  # 오른쪽 위 X
 	var hover := InputEventMouseMotion.new()
 	hover.position = lp + Vector2(60, 40)
 	hover.global_position = hover.position
 	hover.relative = Vector2(60, 40)
 	get_viewport().push_input(hover, true)
 	await _frames(2)
-	_check(not bwin.is_open() and rig.position == cam0, "(B) [닫기] closes it; afterwards a mouse move without a press does not pan the camera",
+	_check(not bwin.is_open() and rig.position == cam0, "(B) the top-right X closes it; afterwards a mouse move without a press does not pan the camera",
 		"open=%s cam %s -> %s" % [bwin.is_open(), cam0, rig.position])
 	await _tap(lp)
 	_check(Economy.res.wood == 1000 and not bwin.is_open() and badges.last_pop.get("amount", 0) == 1000, "(B) a short tap on the same mill still collects (+1000)", "wood=%d" % Economy.res.wood)
@@ -1315,7 +1315,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child_count() == 2,
 		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 00:02", "reqs=%s time=%s" % [rows, bwin.time_label.text])
 	var names := func(lv: int) -> Array: return bwin.effect_lines("keep", lv).map(func(r): return r[0])
-	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면마다 성문", "1개", "2개"]]
+	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면당 성문", "1개", "2개"]]
 		and names.call(9) == ["건물 최대", "성 HP", "성 모습"] and bwin.effect_lines("keep", 4)[2] == ["성 모습", "1단계", "2단계"] and names.call(21).size() == 6 and names.call(30) == ["건물 최대", "성 HP"],
 		"(B) keep slot/area/gate/look lines only when the next level changes them: Lv 1 none, Lv 4 → 5 성 모습 1 → 2단계, Lv 8 → 9 영웅 슬롯 4 → 8, 성 넓이 20칸 → 28칸, 성문 1 → 2, Lv 9 → 10 성 모습 only, Lv 21 → 22 all, max level none",
 		"Lv1=%s Lv8=%s Lv30=%s" % [names.call(1), bwin.effect_lines("keep", 8), names.call(30)])
@@ -1533,7 +1533,7 @@ func _soldiers_ui(tabs, hud) -> void:
 	await _frames(1)
 	var tq := Economy.training("barracks")
 	_check(Economy.res == {"wood": 42000, "stone": 10000, "food": 38000} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
-		and (bwin.run_label.text == "T1 보병 ×8 · 남은 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
+		and (bwin.run_label.text == "T1 보병 ×8 · 남은 시간 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 시간 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
 		and badges.stack_size("barracks", Economy.time_now()).y >= badges.BUILD_LIFT_PX,
 		"(S) [훈련]: resources go down at once (food 12,000 / wood 8,000), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
 		"res=%s q=%s run=%s" % [Economy.res, tq, bwin.run_label.text])
@@ -1602,12 +1602,13 @@ func _growth_ui(tabs) -> void:
 	await _unguarded(gw)
 	var atk = gw.rows.atk
 	print("INPUT INFO: growth sheet %s, atk [강화] %s, [×10] %s (720x1280 logical)" % [gw.dialog.get_global_rect(), atk.up.button.get_global_rect(), atk.ten.button.get_global_rect()])
-	var ids: Array = gw.rows.keys()
+	var ids: Array = gw.rows.keys().filter(func(id): return gw.rows[id].row.visible)  # 고급·최고급·초월은 아래 단계가 다 만렙이 될 때까지 숨는다
+	var hidden_ok: bool = gw.rows.size() == 24 and gw.rows.keys().all(func(id): return gw.rows[id].row.visible == (GameData.upgrade_tier(id) == 0))
 	var note: bool = gw.content.find_children("*", "Label", true, false).any(func(l): return l.text == gw.NOTE)
 	_check(gw.is_open() and tabs.selected == "growth" and ids == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"]
 		and ids.all(func(id): return not icons.shapes(gw.ICONS[id]).is_empty()) and atk.lv.text == "Lv 0 / 200" and atk.effect.text == "+0.0% → +0.5%"
-		and gw.rows.crit_rate.effect.text == "+0.0%p → +0.1%p" and gw.gold_label.text == "보유 골드 100,000" and atk.up.gold.text == "1,000" and not atk.up.button.disabled and note,
-		"(G) [성장] tab: 6 rows with icons, 'Lv 0 / 200', '+0.0% → +0.5%' (%p for crit), gold line, [강화 1,000], the note",
+		and gw.rows.crit_rate.effect.text == "+0.0%p → +0.1%p" and gw.gold_label.text == "보유 골드 100,000" and atk.up.gold.text == "1,000" and not atk.up.button.disabled and note and hidden_ok,
+		"(G) [성장] tab: 6 rows with icons (고급·최고급·초월 18 rows hidden), 'Lv 0 / 200', '+0.0% → +0.5%' (%p for crit), gold line, [강화 1,000], the note",
 		"open=%s ids=%s lv=%s effect=%s gold=%s cost=%s note=%s" % [gw.is_open(), ids, atk.lv.text, atk.effect.text, gw.gold_label.text, atk.up.gold.text, note])
 	await _tap(_center(atk.up.button))
 	_check(Economy.upgrade_level("atk") == 1 and Economy.gold == 99000 and atk.lv.text == "Lv 1 / 200" and atk.effect.text == "+0.5% → +1.0%" and atk.up.gold.text == "1,050"
@@ -1953,7 +1954,7 @@ func _fever_ui(hud) -> void:
 	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
 		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
 	await _tap(fr.get_center())
-	_check(not Fever.active() and Fever.gauge == int(fmax * 0.36) and hud._toast.visible and hud._toast.text == "몬스터 %d마리 더" % (fmax - int(fmax * 0.36)),
+	_check(not Fever.active() and Fever.gauge == int(fmax * 0.36) and hud._toast.visible and hud._toast.text == "몬스터 %d마리 더 처치 필요" % (fmax - int(fmax * 0.36)),
 		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)
@@ -1963,7 +1964,7 @@ func _fever_ui(hud) -> void:
 		GameState.mode = m
 		await _frames(1)
 		await _tap(fr.get_center())
-		_check(not Fever.active() and Fever.full() and hud._toast.text == "스테이지 진행 중엔 FEVER를 쓸 수 없습니다" and fb.modulate.a < 1.0,
+		_check(not Fever.active() and Fever.full() and hud._toast.text == "스테이지 진행 중에는 FEVER를 사용할 수 없습니다" and fb.modulate.a < 1.0,
 			"(fever) while pushing a stage (mode %d) FEVER can't start: dimmed, tap only toasts, gauge kept" % m,
 			"active=%s gauge=%d toast=%s a=%.2f" % [Fever.active(), Fever.gauge, hud._toast.text, fb.modulate.a])
 	GameState.mode = mode0
@@ -2803,7 +2804,7 @@ func _dungeon_ui(tabs) -> void:
 	var first_on := [Fever.dungeon_auto, hud.auto_next_box.button_pressed, hud.auto_repeat_box.button_pressed]
 	await _tap(hud.auto_repeat_box.get_global_rect().get_center())
 	_check(first_on == ["next", true, false] and Fever.dungeon_auto == "repeat" and not hud.auto_next_box.button_pressed and hud.auto_repeat_box.button_pressed
-		and d.auto_left > 1.5 and hud.auto_label.text == "2초 뒤 자동 도전", "(D) the two auto checkboxes are exclusive; 현재 단계 자동 반복 counts down 2 s",
+		and d.auto_left > 1.5 and hud.auto_label.text == "2초 후 자동 도전", "(D) the two auto checkboxes are exclusive; 현재 단계 자동 반복 counts down 2 s",
 		"first=%s now=%s left=%.2f label=%s" % [first_on, Fever.dungeon_auto, d.auto_left, hud.auto_label.text])
 	await _wait_until(func(): return Economy.dungeon_state("gold").keys == 0 and _main._dungeon != null and _main._dungeon.auto_halted, 15.0)
 	d = _main._dungeon
@@ -3195,13 +3196,47 @@ func _recruit23_ui(recruit) -> void:
 	var shop = recruit.shop
 	var sr: Rect2 = shop.dialog.get_global_rect()
 	_check(shop.is_open() and not recruit.is_open() and shop.tab == "diamond" and shop.buy_buttons.size() == 6 and shop.buy_buttons.all(func(b): return not b.disabled and b.text.begins_with("₩"))
-		and shop.note.text.begins_with("쓰지 않은 상품만") and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
+		and shop.note.text.begins_with("사용하지 않은 상품만") and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
 		"(r23) [이동] closes the recruit window and opens the shop on its 다이아 tab: 6 packs with ₩ prices, the payment note; fits 720x1280", "open=%s recruit=%s tab=%s buys=%s note=%s rect=%s" % [shop.is_open(), recruit.is_open(), shop.tab, shop.buy_buttons.map(func(b): return "%s%s" % [b.text, "x" if b.disabled else ""]), shop.note.text.left(20), sr])
 	await _unguarded(shop)
 	var d0: int = Economy.diamonds
 	await _tap(shop.buy_buttons[0].get_global_rect().get_center())
 	await _frames(2)
 	_check(Economy.diamonds == d0 and shop.is_open(), "(r23) tapping a ₩ pack before payments are connected changes nothing (notice only)", "")
+	# 탭을 바꿔도 양피지(시트) 너비가 그대로(2026-11-05 사용자 "양피지가 움찔움찔 — 너비가 안 맞는다": 칸이 시트보다 넓으면 탭마다 창이 커졌다)
+	var widths := {}
+	for t in shop.TABS:
+		shop.open_tab(t[0])
+		await _frames(2)
+		widths[t[0]] = shop.dialog.size.x
+	_check(widths.values().all(func(w): return absf(w - sr.size.x) < 0.5), "(r23) every shop tab keeps the same sheet width (no twitch when switching tabs)", "want=%s %s" % [sr.size.x, widths])
+	# [패스] 탭: 하위 탭 [성장 패스][성채 레벨 패스] — 고른 패스 표 하나만(2026-11-06 사용자 "하위 탭으로 구분지어 밑으로 늘어뜨리지 말고")
+	shop.open_tab("pass")
+	await _frames(2)
+	var texts := func(): return shop.body.find_children("*", "Label", true, false).map(func(l): return l.text) + shop.body.find_children("*", "Button", true, false).map(func(b): return b.text)
+	var g_text: Array = texts.call()
+	var g_rows: int = shop.body.get_child_count()
+	shop.buttons["pass:keep"].pressed.emit()
+	await _frames(2)
+	var k_text: Array = texts.call()
+	_check(shop.buttons.has("pass:growth") and shop.pass_tab == "keep" and g_text.has("Lv 3") == false and k_text.has("Lv 3") and k_text.has("Lv 30")
+		and absf(shop.dialog.size.x - sr.size.x) < 0.5 and g_rows == preload("res://scripts/iap_items.gd").GROWTH.size() + 4
+		and shop.body.get_child_count() == preload("res://scripts/iap_items.gd").KEEP.size() + 4,
+		"(r23) the pass tab has sub-tabs [성장 패스][성채 레벨 패스]; each shows only its own table (sub-tab row, pass card, header, rows, note)",
+		"growth_rows=%d keep_rows=%d keep_has_lv3=%s" % [g_rows, shop.body.get_child_count(), k_text.has("Lv 3")])
+	shop.buttons["pass:growth"].pressed.emit()
+	await _frames(2)
+	var hp = tabs_hero_panel()
+	if hp != null:
+		hp.open()
+		await _frames(2)
+		var hw: float = hp.dialog.size.x
+		hp.set_tab("fuse")
+		await _frames(2)
+		_check(absf(hw - sr.size.x) < 0.5 and absf(hp.dialog.size.x - sr.size.x) < 0.5, "(r23) the hero sheet is as wide as the other sheets on both tabs", "hero=%s fuse=%s want=%s" % [hw, hp.dialog.size.x, sr.size.x])
+		hp.set_tab("heroes")
+		hp.close()
+		await _frames(2)
 	shop.close()
 	Economy.diamonds = 9999999
 	Economy.gold = 9999999
@@ -3224,6 +3259,13 @@ func _recruit23_ui(recruit) -> void:
 	Fever.auto_recruit = keep[5]
 	recruit.set_currency("gold")
 	Economy.changed.emit()
+
+
+func tabs_hero_panel():
+	for c in _main.find_children("*", "CanvasLayer", true, false):
+		if c.get_script() == preload("res://scripts/hero_panel.gd"):
+			return c
+	return null
 
 
 ## 장비 던전 카드 열쇠 밑 골드 줄 "현재 골드 / 추가 도전 비용": 모자라면 현재 골드가 빨강, 골드가 오르면 원래 색(Economy.changed로 바로).

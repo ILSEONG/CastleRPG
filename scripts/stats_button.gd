@@ -227,15 +227,7 @@ func _build_popup() -> void:
 	total_label = _label("", 22)
 	total_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	col.add_child(total_label)
-	var close_button := Button.new()
-	close_button.text = Lang.t("stats_button.build_popup_4")
-	close_button.focus_mode = Control.FOCUS_NONE
-	close_button.custom_minimum_size = Vector2(220, 68)
-	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close_button.add_theme_font_size_override("font_size", 26)
-	UiKit.apply_button(close_button, UiKit.STEEL, 14.0)
-	close_button.pressed.connect(close)
-	col.add_child(close_button)
+	UiKit.corner_x(box, close)  # 오른쪽 위 닫기 X(2026-11-05, [닫기] 대신)
 
 
 func _tab_button(t: String) -> Button:

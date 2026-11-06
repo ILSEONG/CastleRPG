@@ -75,9 +75,10 @@ export interface OpsStatus {
   maintenance_until: number | null // 유닉스 초
   min_version: string
   store_url: string
+  ad_ssv: boolean // 광고 보상은 AdMob 서버 확인(SSV)이 된 광고만(토스·PC처럼 실제 광고가 없는 앱은 광고 상품을 못 받는다)
 }
 
-export const DEFAULT_STATUS: OpsStatus = { maintenance: false, maintenance_text: '', maintenance_until: null, min_version: '', store_url: '' }
+export const DEFAULT_STATUS: OpsStatus = { maintenance: false, maintenance_text: '', maintenance_until: null, min_version: '', store_url: '', ad_ssv: false }
 
 // "0.2.1" 비교: 숫자 칸끼리(없는 칸 = 0). a < b면 음수.
 export function cmpVersion(a: string, b: string): number {
@@ -142,7 +143,8 @@ export function opsGate(d: Any) {
     if (c.req.method === 'OPTIONS' || path === '/v1/health') return next()
     const st: OpsStatus = await d.status()
     const v = c.req.header('x-app-version') ?? ''
-    if (st.min_version && VERSION_RE.test(v) && cmpVersion(v, st.min_version) < 0 && !OPEN_IN_UPDATE.some((re) => re.test(path))) {
+    // 버전을 안 보내거나 모양이 틀려도 낮은 버전으로 본다(2026-11-06 보안 점검 — 고친 옛 앱이 헤더를 빼 강제 업데이트를 넘지 못하게)
+    if (st.min_version && (!VERSION_RE.test(v) || cmpVersion(v, st.min_version) < 0) && !OPEN_IN_UPDATE.some((re) => re.test(path))) {
       return c.json({ error: 'update_required', message: 'please update the app', min_version: st.min_version, store_url: st.store_url }, 426)
     }
     if (st.maintenance && !OPEN_IN_MAINTENANCE.some((re) => re.test(path))) {
@@ -203,7 +205,7 @@ export function registerLiveOps(app: Hono<Any>, d: Any) {
   }
 
   function statusView(st: OpsStatus) {
-    return { maintenance: { on: st.maintenance, text: st.maintenance_text, until: st.maintenance_until }, min_version: st.min_version, store_url: st.store_url }
+    return { maintenance: { on: st.maintenance, text: st.maintenance_text, until: st.maintenance_until }, min_version: st.min_version, store_url: st.store_url, ad_ssv: st.ad_ssv }
   }
 
   // 로그인 없이 자주 읽는 공지(목록·최근 id)는 서버 상태(d.status)처럼 d.cacheMs 동안 한 번 읽은 것을 같이 쓴다(운영 10초, 테스트 0 = 매번).
@@ -344,6 +346,10 @@ export function registerLiveOps(app: Hono<Any>, d: Any) {
       const u = str(b, 'store_url', 300, false)
       if (u && !/^https:\/\/\S+$/.test(u)) throw new ApiError(400, 'bad_request', "'store_url' must be an https URL")
       cur.store_url = u
+    }
+    if (b.ad_ssv !== undefined) {
+      if (typeof b.ad_ssv !== 'boolean') throw new ApiError(400, 'bad_request', "'ad_ssv' must be a boolean")
+      cur.ad_ssv = b.ad_ssv
     }
     await setStatus(cur)
     return c.json({ server_now: clock(), status: statusView(cur) })

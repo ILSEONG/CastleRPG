@@ -9,48 +9,48 @@ extends RefCounted
 const DIR := "res://assets/ui/heroes/"
 const FACE_AT := 0.3  # 자른 창 세로에서 얼굴 가운데가 올 비율
 const FOCUS := {
-	"arteon": Vector2(0.58, 0.19),
-	"ignis": Vector2(0.60, 0.23),
-	"sylvana": Vector2(0.64, 0.17),
-	"grom": Vector2(0.56, 0.23),
-	"seraphine": Vector2(0.56, 0.18),
-	"kyle": Vector2(0.58, 0.19),
-	"baldur": Vector2(0.62, 0.21),
-	"lumina": Vector2(0.52, 0.21),
-	"harald": Vector2(0.56, 0.26),
-	"nev": Vector2(0.42, 0.25),
-	"bron": Vector2(0.52, 0.27),
-	"mira": Vector2(0.56, 0.23),
-	"torvin": Vector2(0.62, 0.28),
-	"rian": Vector2(0.56, 0.21),
-	"echo": Vector2(0.46, 0.23),
-	"gork": Vector2(0.58, 0.25),
-	"felix": Vector2(0.62, 0.25),
-	"hans": Vector2(0.55, 0.15),
-	"ella": Vector2(0.56, 0.14),
-	"dorik": Vector2(0.56, 0.17),
-	"nina": Vector2(0.48, 0.22),
-	"jack": Vector2(0.56, 0.28),
-	"valen": Vector2(0.52, 0.26),
-	"frieda": Vector2(0.52, 0.19),
-	"morgana": Vector2(0.54, 0.23),
-	"thorgar": Vector2(0.52, 0.23),
-	"raven": Vector2(0.58, 0.24),
-	"gaia": Vector2(0.52, 0.22),
-	"dante": Vector2(0.53, 0.22),
-	"kaz": Vector2(0.60, 0.21),
-	"luna": Vector2(0.48, 0.23),
-	"orin": Vector2(0.56, 0.26),
-	"selene": Vector2(0.58, 0.24),
-	"pip": Vector2(0.50, 0.24),
-	"grit": Vector2(0.54, 0.24),
-	"tia": Vector2(0.60, 0.22),
-	"hyeonmu": Vector2(0.49, 0.39),
-	"baekho": Vector2(0.55, 0.43),
-	"yeonhwa": Vector2(0.47, 0.35),
-	"cheongryong": Vector2(0.52, 0.37),
-	"chronos": Vector2(0.51, 0.32),
-	"jujak": Vector2(0.42, 0.33),
+	"arteon": Vector2(0.47, 0.23),
+	"ignis": Vector2(0.47, 0.32),
+	"sylvana": Vector2(0.56, 0.15),
+	"grom": Vector2(0.61, 0.20),
+	"seraphine": Vector2(0.47, 0.13),
+	"kyle": Vector2(0.60, 0.17),
+	"baldur": Vector2(0.46, 0.23),
+	"lumina": Vector2(0.50, 0.14),
+	"harald": Vector2(0.49, 0.18),
+	"nev": Vector2(0.57, 0.34),
+	"bron": Vector2(0.50, 0.16),
+	"mira": Vector2(0.30, 0.22),
+	"torvin": Vector2(0.54, 0.33),
+	"rian": Vector2(0.50, 0.27),
+	"echo": Vector2(0.61, 0.32),
+	"gork": Vector2(0.65, 0.16),
+	"felix": Vector2(0.45, 0.21),
+	"hans": Vector2(0.52, 0.16),
+	"ella": Vector2(0.29, 0.25),
+	"dorik": Vector2(0.57, 0.15),
+	"nina": Vector2(0.55, 0.27),
+	"jack": Vector2(0.61, 0.23),
+	"valen": Vector2(0.54, 0.35),
+	"frieda": Vector2(0.55, 0.12),
+	"morgana": Vector2(0.60, 0.20),
+	"thorgar": Vector2(0.45, 0.20),
+	"raven": Vector2(0.71, 0.10),
+	"gaia": Vector2(0.50, 0.17),
+	"dante": Vector2(0.63, 0.15),
+	"kaz": Vector2(0.50, 0.25),
+	"luna": Vector2(0.42, 0.17),
+	"orin": Vector2(0.57, 0.17),
+	"selene": Vector2(0.35, 0.20),
+	"pip": Vector2(0.41, 0.17),
+	"grit": Vector2(0.44, 0.24),
+	"tia": Vector2(0.54, 0.28),
+	"hyeonmu": Vector2(0.48, 0.24),
+	"baekho": Vector2(0.40, 0.16),
+	"yeonhwa": Vector2(0.50, 0.18),
+	"cheongryong": Vector2(0.35, 0.25),
+	"chronos": Vector2(0.46, 0.29),
+	"jujak": Vector2(0.43, 0.13),
 }
 
 static var enabled := true  # false면 그림이 있어도 예전 흉상(테스트·비교용)
@@ -98,7 +98,7 @@ static func region(tex: Vector2, win: Vector2, face: Vector2, face_at := FACE_AT
 
 
 ## 다각형 poly(창 r 안)를 그림으로 채운다 — UV는 region을 창 r에 맞춘 좌표라 모서리 깎인 모양대로 잘린다.
-static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rect2, face_at := FACE_AT, zoom := 1.0) -> bool:
+static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rect2, face_at := FACE_AT, zoom := 1.0, alpha := 1.0) -> bool:
 	var tex := texture(id)
 	if tex == null or r.size.x <= 0.0 or r.size.y <= 0.0:
 		return false
@@ -108,5 +108,5 @@ static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rec
 	for p in poly:
 		var k := (p - r.position) / r.size
 		uvs.append((reg.position + k * reg.size) / ts)
-	ci.draw_colored_polygon(poly, Color.WHITE, uvs, tex)
+	ci.draw_colored_polygon(poly, Color(1, 1, 1, alpha), uvs, tex)
 	return true

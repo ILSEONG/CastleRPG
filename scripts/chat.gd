@@ -29,6 +29,7 @@ static var REFUSALS := {
 	"too_many": Lang.t("chat.refusals.too_many"),
 	"no_message": Lang.t("chat.refusals.no_message"),
 	"own_message": Lang.t("chat.refusals.own_message"),
+	"muted": Lang.t("chat.refusals.muted"),
 }
 
 var messages := {"all": [], "guild": []}  # 채널 → [{id, name, text, at, me, local?}] (오래된 것부터)

@@ -6,7 +6,7 @@
 // 점수: 수비 영웅 처치 1 · 성문 10(2개까지) · 성채 최대 체력의 3%를 깎을 때마다 1(서버가 성 상태로 센다). 상대 점수 = 가상 상대가 우리 성을 한 번 친 결과(enemyPoints) —
 // 우리 공성 시간이 끝나면 보인다.
 import { heroMaxLevel, mulberry32, powerAt, type Config, type StatLimit } from './rules.ts'
-import { guildName, mix, nickname } from './guild.ts'
+import { guildName, mix, nickname, randomEmblem } from './guild.ts'
 
 export const BATTLE_SEC = 600
 // 배치 단계(2026-10-07 사용자: 공격팀이 먼저 성 밖 어디서 칠지 자리를 잡고, 길드장(또는 슈퍼관리자)이 [전투 시작]을 누른다).
@@ -113,7 +113,7 @@ export function enemyGuild(seed: number, n: number, avg: number, heroes: HeroDef
     const sq = randomSquad(r, heroes, power, cfg)
     sq.forEach((h, i) => defenders.push({ ...h, uid: 1 + m * SQUAD + i, owner: `d:${m}`, name, squad: m, lane: m % 4 }))
   }
-  return { seed, name: guildName(mix(seed, 3)), emblem: mix(seed, 4) % 8, power: Math.round(members.reduce((a, b) => a + b.power, 0)), members, defenders }
+  return { seed, name: guildName(mix(seed, 3)), emblem: randomEmblem(mix(seed, 4)), power: Math.round(members.reduce((a, b) => a + b.power, 0)), members, defenders }
 }
 
 export interface Castle { gates: number[]; keep: number; dead: Record<string, number> } // dead: uid → 남은 체력 비율(< 1인 것만, 0 = 쓰러짐)

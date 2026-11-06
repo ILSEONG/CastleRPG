@@ -1,6 +1,7 @@
 // 길드 규칙(순수 함수, 시간 인자). 앱 scripts/guild.gd와 같은 수치·규칙.
 // 길드 경험치·보스 누적 피해 = 실제 길드원이 쌓은 값(guilds.exp·boss_damage) + 가상 길드원 몫(virtualTotals — 길드 seed·생성 시각·지금으로
 // 매번 같은 값을 계산한다. 저장하지 않으므로 여러 요청이 겨뤄도 두 번 세지 않는다). 레벨·보스 단계는 누적값에서 나온다.
+import * as N from './names.ts'
 import { mulberry32, powerAt, resetAt, resetDay } from './rules.ts'
 import { txt } from './texts.ts'
 
@@ -62,7 +63,25 @@ export const SHOP: { id: string; give: Record<string, number>; price: number; li
   { id: 'shards', give: { shards: 3 }, price: 200, limit: 5, period: 'week' },
   { id: 'ssr', give: { ssr_shards: 1 }, price: 600, limit: 2, period: 'week' },
 ]
-export const EMBLEMS = 8
+// 길드 문양(2026-11-05, 길드장이 배경 모양 + 가운데 문양 + 배경 색 + 문양 색을 고른다 — 앱 scripts/guild_emblem.gd와 같은 식):
+// 0..7 = 예전 문장, 8 이상 = 8 + 모양 + 8 × (문양 + 20 × (배경색 + 12 × 문양색)).
+export const EMBLEM_LEGACY = 8
+export const EMBLEM_SHAPES = 8
+export const EMBLEM_SYMBOLS = 20
+export const EMBLEM_BG = 12
+export const EMBLEM_FG = 10
+export const EMBLEMS = EMBLEM_LEGACY + EMBLEM_SHAPES * EMBLEM_SYMBOLS * EMBLEM_BG * EMBLEM_FG
+const EMBLEM_DARK_BG = [5, 9, 11] // 남색·갈색·검정 바탕엔 검정 문양 대신 흰색
+// 수 하나(0 이상)로 정해지는 무작위 문양(추천·상대 길드): 문양색은 흰색·상아·은색·검정 중에서.
+export function randomEmblem(n: number): number {
+  n = Math.abs(Math.floor(n))
+  const shape = n % EMBLEM_SHAPES
+  const symbol = Math.floor(n / EMBLEM_SHAPES) % EMBLEM_SYMBOLS
+  const bg = Math.floor(n / (EMBLEM_SHAPES * EMBLEM_SYMBOLS)) % EMBLEM_BG
+  let fg = Math.floor(n / (EMBLEM_SHAPES * EMBLEM_SYMBOLS * EMBLEM_BG)) % 4
+  if (fg === 3 && EMBLEM_DARK_BG.includes(bg)) fg = 0
+  return EMBLEM_LEGACY + shape + EMBLEM_SHAPES * (symbol + EMBLEM_SYMBOLS * (bg + EMBLEM_BG * fg))
+}
 export const RECOMMEND_N = 5
 export const SYSTEM_VIRTUAL = [12, 18] // 시스템 길드 가상 길드원 수 범위
 export const CREATED_VIRTUAL = 10 // 직접 만든 길드: 가상 길드원이 몇 시간마다 한 명씩 이만큼까지 들어온다
@@ -102,7 +121,12 @@ export function nickname(seed: number): string {
 }
 
 // 플레이어 id(uuid) → 길드원 이름(같은 id면 늘 같다).
+// 자동 별명 모양(앞말 + 뒷말 + 숫자)인가 — rules.looksDefaultName과 같은 용도(길드 쪽 별명 목록)
+export const looksDefaultName = (name: string) => NICK_A.some((a) => name.startsWith(a) && NICK_B.some((b) => name.slice(a.length).startsWith(b) && /^\d{0,2}$/.test(name.slice(a.length + b.length))))
+
 export function playerName(id: string): string {
+  const own = N.customName(id) // 고른 닉네임이 있으면 그것(names.ts)
+  if (own) return own
   const hex = id.replace(/-/g, '')
   return nickname(mix(parseInt(hex.slice(0, 8), 16), parseInt(hex.slice(8, 16), 16)))
 }
@@ -248,7 +272,7 @@ export function systemGuild(seed: number, now: number) {
   return {
     seed,
     name: guildName(seed),
-    emblem: Math.floor(r() * EMBLEMS),
+    emblem: randomEmblem(Math.floor(r() * 2 ** 30)),
     notice: pick(r, NOTICES),
     created_at: now - range(r, 3, 45) * 86400,
     virtual_n: SYSTEM_VIRTUAL[0] + Math.floor(r() * (SYSTEM_VIRTUAL[1] - SYSTEM_VIRTUAL[0] + 1)),

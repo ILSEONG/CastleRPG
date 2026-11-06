@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto'
 
 export const PER_MIN = 30
+export const CLIENT_PER_MIN = 10 // 그중 앱이 보낸 오류(누구나 보낼 수 있다 — 서버 오류 몫을 다 쓰지 못하게, 2026-11-06 보안 점검)
 export const DEDUPE_SEC = 600
 export const SLOW_MS = 3000
 
@@ -28,6 +29,7 @@ export class Sentry {
   private recent = new Map<string, number>()
   private minute = 0
   private n = 0
+  private nClient = 0
   private release: string
   private environment: string
   private post: (url: string, init: RequestInit) => Promise<unknown>
@@ -53,7 +55,7 @@ export class Sentry {
   }
 
   // 보낼지 정한다(꺼짐·같은 오류 반복·분당 한도). now = 유닉스 초
-  private allow(key: string, now: number): boolean {
+  private allow(key: string, now: number, client = false): boolean {
     if (!this.on) return false
     const last = this.recent.get(key)
     if (last !== undefined && now - last < DEDUPE_SEC) return false
@@ -61,18 +63,21 @@ export class Sentry {
     if (m !== this.minute) {
       this.minute = m
       this.n = 0
+      this.nClient = 0
     }
-    if (this.n >= PER_MIN) return false
+    if (this.n >= PER_MIN || (client && this.nClient >= CLIENT_PER_MIN)) return false
     this.n++
+    if (client) this.nClient++
     if (this.recent.size > 2000) this.recent.clear()
     this.recent.set(key, now)
     return true
   }
 
   capture(r: Report, now = Date.now() / 1000): boolean {
-    const message = String(r.message).slice(0, 1000)
+    // 서버 오류 메시지의 따옴표 안 값(DB 오류가 사용자 입력을 그대로 옮긴다)은 지운다
+    const message = (r.platform === 'other' ? String(r.message) : String(r.message).replace(/"[^"]*"/g, '"…"')).slice(0, 1000)
     const key = `${r.type}|${message.slice(0, 200)}|${(r.stack ?? '').slice(0, 300)}`
-    if (!this.allow(key, now)) return false
+    if (!this.allow(key, now, r.platform === 'other')) return false
     const eventId = randomUUID().replaceAll('-', '')
     const frames = parseStack(r.stack ?? '')
     const event = {

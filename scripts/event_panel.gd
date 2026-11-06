@@ -63,16 +63,13 @@ func _ready() -> void:
 	content.add_child(info)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var close_button := _button(Lang.t("event_panel.ready"), UiKit.STEEL)
-	close_button.custom_minimum_size.x = 160
-	close_button.pressed.connect(close)
-	row.add_child(close_button)
 	claim_button = _button(Lang.t("event_panel.ready_2"))
 	claim_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	claim_button.pressed.connect(claim)
 	Tutorial.register_ui("event:claim", claim_button, can_claim)  # 가이드 「출석 보상 받기」 화살표
 	row.add_child(claim_button)
 	content.add_child(row)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 	if PortraitsScript.current != null:
 		PortraitsScript.current.portrait_ready.connect(func(_k): _redraw_cells())
 	_rebuild()
@@ -274,7 +271,8 @@ static func cell_lines(r: Dictionary) -> Array:
 	if pz.size() == 1:
 		var id: String = pz.keys()[0]
 		var m := int(Economy.pouch_parse(id).min)
-		lines.append(Lang.t("event_panel.cell_lines_4") + ((Lang.t("event_panel.cell_lines_5") % (m / 60)) if m >= 60 else (Lang.t("event_panel.cell_lines_6") % m)))
+		var dur: String = (Lang.t("event_panel.cell_lines_5") % (m / 60)) if m >= 60 else (Lang.t("event_panel.cell_lines_6") % m)
+		lines.append(Lang.t("event_panel.cell_lines_4") + dur if int(pz[id]) == 1 else "%s x%d" % [dur, int(pz[id])])  # 여러 개: "1시간 x2"(칸 폭)
 	elif pz.size() > 1:
 		lines.append(Lang.t("event_panel.cell_lines_7") % pz.size())
 	return lines
@@ -307,7 +305,7 @@ func _draw_cell(c: Control, i: int, r: Dictionary, n: int) -> void:
 	var ctr := Vector2(c.size.x / 2.0, 56)
 	_draw_reward_icon(c, r, ctr, 42.0)
 	var pz := Economy.pouches_in(r)
-	if not pz.is_empty() and r.size() > pz.size():  # 다른 보상과 함께 주는 주머니: 그림 오른쪽 위에 작은 주머니
+	if not pz.is_empty() and r.size() > pz.size() and not _pouch_is_main(r, pz):  # 다른 보상과 함께 주는 주머니: 그림 오른쪽 위에 작은 주머니
 		PouchPanel.draw_pouch(c, ctr + Vector2(26, -14), 26.0, str(Economy.pouch_parse(pz.keys()[0]).kind))
 	var lines := cell_lines(r)
 	var y := 96.0
@@ -317,6 +315,14 @@ func _draw_cell(c: Control, i: int, r: Dictionary, n: int) -> void:
 		c.draw_colored_polygon(oct, Color(1, 1, 1, 0.55))
 		var m := c.size / 2.0 + Vector2(0, -4)
 		c.draw_polyline(PackedVector2Array([m + Vector2(-18, 0), m + Vector2(-5, 13), m + Vector2(20, -14)]), DONE_INK, 7.0, true)
+
+
+## 칸의 큰 그림이 주머니인가(주머니 + 가속 아이템처럼 그림이 있는 다른 보상이 없을 때) — 그러면 작은 주머니를 겹쳐 그리지 않는다.
+static func _pouch_is_main(r: Dictionary, pz: Dictionary) -> bool:
+	for k in r:
+		if not pz.has(k) and not str(k).begins_with("pouch_") and not str(k).begins_with("speedup_"):
+			return false
+	return true
 
 
 ## 보상 그림: 영웅 피규어 > 장비 상자 > 골드·다이아·자원 > 열쇠 > 모집권. 장비 상자·자원 더미·열쇠·모집권·주머니는 상점과 같은 그린 그림(ShopArt).

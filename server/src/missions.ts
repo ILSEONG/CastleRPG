@@ -17,38 +17,37 @@ export interface MissionDef {
   reward: Record<string, number>
 }
 
-const RES = (n: number) => ({ wood: n, stone: n, food: n })
 
 export const DEFS: MissionDef[] = [
   // 일일(8 + 보너스)
-  { id: 'd_kill', type: 'daily', kind: 'kill', title: txt('server.missions.defs.d_kill.title'), target: 300, reward: { gold: 3000, pouch_gold_10: 1, speedup_build_15: 1 } },
-  { id: 'd_collect', type: 'daily', kind: 'collect', title: txt('server.missions.defs.d_collect.title'), target: 5, reward: { ...RES(3000), pouch_res_10: 1, speedup_research_15: 1 } },
-  { id: 'd_sell', type: 'daily', kind: 'sell', title: txt('server.missions.defs.d_sell.title'), target: 2, reward: { gold: 2000 } },
-  { id: 'd_hero', type: 'daily', kind: 'hero_level', title: txt('server.missions.defs.d_hero.title'), target: 5, reward: { gold: 3000 } },
-  { id: 'd_growth', type: 'daily', kind: 'growth', title: txt('server.missions.defs.d_growth.title'), target: 3, reward: { gold: 3000 } },
-  { id: 'd_gacha', type: 'daily', kind: 'gacha', title: txt('server.missions.defs.d_gacha.title'), target: 10, reward: { diamonds: 30 } },
-  { id: 'd_dungeon', type: 'daily', kind: 'dungeon_win', title: txt('server.missions.defs.d_dungeon.title'), target: 2, reward: { diamonds: 30 } },
-  { id: 'd_guild', type: 'daily', kind: 'guild_attend', title: txt('server.missions.defs.d_guild.title'), target: 1, reward: { diamonds: 20 } },
-  { id: 'd_all', type: 'daily', kind: 'daily_count', title: txt('server.missions.defs.d_all.title'), target: 6, reward: { diamonds: 100, tickets: 1, pouch_gold_60: 1, speedup_build_60: 2, speedup_research_60: 1, speedup_any_60: 1 } },
+  { id: 'd_kill', type: 'daily', kind: 'kill', title: txt('server.missions.defs.d_kill.title'), target: 300, reward: { pouch_gold_10: 2, speedup_build_15: 1 } },
+  { id: 'd_collect', type: 'daily', kind: 'collect', title: txt('server.missions.defs.d_collect.title'), target: 5, reward: { pouch_res_10: 2, speedup_research_15: 1 } },
+  { id: 'd_sell', type: 'daily', kind: 'sell', title: txt('server.missions.defs.d_sell.title'), target: 2, reward: { pouch_gold_10: 1 } },
+  { id: 'd_hero', type: 'daily', kind: 'hero_level', title: txt('server.missions.defs.d_hero.title'), target: 5, reward: { pouch_gold_10: 1 } },
+  { id: 'd_growth', type: 'daily', kind: 'growth', title: txt('server.missions.defs.d_growth.title'), target: 3, reward: { pouch_gold_10: 1 } },
+  { id: 'd_gacha', type: 'daily', kind: 'gacha', title: txt('server.missions.defs.d_gacha.title'), target: 10, reward: { diamonds: 300 } },
+  { id: 'd_dungeon', type: 'daily', kind: 'dungeon_win', title: txt('server.missions.defs.d_dungeon.title'), target: 2, reward: { diamonds: 300 } },
+  { id: 'd_guild', type: 'daily', kind: 'guild_attend', title: txt('server.missions.defs.d_guild.title'), target: 1, reward: { diamonds: 200 } },
+  { id: 'd_all', type: 'daily', kind: 'daily_count', title: txt('server.missions.defs.d_all.title'), target: 6, reward: { diamonds: 1000, tickets: 1, pouch_gold_60: 1, speedup_build_60: 2, speedup_research_60: 1, speedup_any_60: 1 } },
   // 주간
   { id: 'w_bonus', type: 'weekly', kind: 'daily_bonus', title: txt('server.missions.defs.w_bonus.title'), target: 5, reward: { tickets: 5, pouch_gold_360: 1, pouch_res_360: 1, speedup_any_480: 2, speedup_builder_2880: 1 } },
-  { id: 'w_kill', type: 'weekly', kind: 'kill', title: txt('server.missions.defs.w_kill.title'), target: 3000, reward: { gold: 30000, pouch_gold_240: 1 } },
-  { id: 'w_dungeon', type: 'weekly', kind: 'dungeon_win', title: txt('server.missions.defs.w_dungeon.title'), target: 10, reward: { diamonds: 150 } },
-  { id: 'w_gacha', type: 'weekly', kind: 'gacha', title: txt('server.missions.defs.w_gacha.title'), target: 50, reward: { diamonds: 150 } },
-  { id: 'w_hero', type: 'weekly', kind: 'hero_level', title: txt('server.missions.defs.w_hero.title'), target: 30, reward: { gold: 30000 } },
-  { id: 'w_build', type: 'weekly', kind: 'build_up', title: txt('server.missions.defs.w_build.title'), target: 3, reward: { ...RES(20000), pouch_res_240: 1, speedup_build_480: 1 } },
-  { id: 'w_research', type: 'weekly', kind: 'research', title: txt('server.missions.defs.w_research.title'), target: 2, reward: { gold: 20000, speedup_research_480: 1 } },
-  { id: 'w_train', type: 'weekly', kind: 'train', title: txt('server.missions.defs.w_train.title'), target: 3, reward: { gold: 10000 } },
-  { id: 'w_boss', type: 'weekly', kind: 'guild_boss', title: txt('server.missions.defs.w_boss.title'), target: 3, reward: { diamonds: 100 } },
+  { id: 'w_kill', type: 'weekly', kind: 'kill', title: txt('server.missions.defs.w_kill.title'), target: 3000, reward: { pouch_gold_60: 1, pouch_gold_240: 1 } },
+  { id: 'w_dungeon', type: 'weekly', kind: 'dungeon_win', title: txt('server.missions.defs.w_dungeon.title'), target: 10, reward: { diamonds: 1500 } },
+  { id: 'w_gacha', type: 'weekly', kind: 'gacha', title: txt('server.missions.defs.w_gacha.title'), target: 50, reward: { diamonds: 1500 } },
+  { id: 'w_hero', type: 'weekly', kind: 'hero_level', title: txt('server.missions.defs.w_hero.title'), target: 30, reward: { pouch_gold_60: 1 } },
+  { id: 'w_build', type: 'weekly', kind: 'build_up', title: txt('server.missions.defs.w_build.title'), target: 3, reward: { pouch_res_30: 1, pouch_res_240: 1, speedup_build_480: 1 } },
+  { id: 'w_research', type: 'weekly', kind: 'research', title: txt('server.missions.defs.w_research.title'), target: 2, reward: { pouch_gold_30: 1, speedup_research_480: 1 } },
+  { id: 'w_train', type: 'weekly', kind: 'train', title: txt('server.missions.defs.w_train.title'), target: 3, reward: { pouch_gold_10: 2 } },
+  { id: 'w_boss', type: 'weekly', kind: 'guild_boss', title: txt('server.missions.defs.w_boss.title'), target: 3, reward: { diamonds: 1000 } },
   // 반복(목표 = target + step × 받은 횟수)
-  { id: 'r_kill', type: 'repeat', kind: 'kill', title: txt('server.missions.defs.r_kill.title'), target: 1000, step: 500, reward: { gold: 5000, pouch_gold_30: 1 } },
-  { id: 'r_stage', type: 'repeat', kind: 'stage', title: txt('server.missions.defs.r_stage.title'), target: 10, step: 5, reward: { diamonds: 20, speedup_any_5: 1 } },
-  { id: 'r_collect', type: 'repeat', kind: 'collect', title: txt('server.missions.defs.r_collect.title'), target: 20, step: 10, reward: { ...RES(5000), pouch_res_30: 1 } },
-  { id: 'r_sell', type: 'repeat', kind: 'sell', title: txt('server.missions.defs.r_sell.title'), target: 10, step: 5, reward: { gold: 5000 } },
-  { id: 'r_hero', type: 'repeat', kind: 'hero_level', title: txt('server.missions.defs.r_hero.title'), target: 20, step: 10, reward: { gold: 5000 } },
-  { id: 'r_growth', type: 'repeat', kind: 'growth', title: txt('server.missions.defs.r_growth.title'), target: 20, step: 10, reward: { gold: 5000 } },
+  { id: 'r_kill', type: 'repeat', kind: 'kill', title: txt('server.missions.defs.r_kill.title'), target: 1000, step: 500, reward: { pouch_gold_10: 1, pouch_gold_30: 1 } },
+  { id: 'r_stage', type: 'repeat', kind: 'stage', title: txt('server.missions.defs.r_stage.title'), target: 10, step: 5, reward: { diamonds: 200, speedup_any_5: 1 } },
+  { id: 'r_collect', type: 'repeat', kind: 'collect', title: txt('server.missions.defs.r_collect.title'), target: 20, step: 10, reward: { pouch_res_10: 1, pouch_res_30: 1 } },
+  { id: 'r_sell', type: 'repeat', kind: 'sell', title: txt('server.missions.defs.r_sell.title'), target: 10, step: 5, reward: { pouch_gold_10: 1 } },
+  { id: 'r_hero', type: 'repeat', kind: 'hero_level', title: txt('server.missions.defs.r_hero.title'), target: 20, step: 10, reward: { pouch_gold_10: 1 } },
+  { id: 'r_growth', type: 'repeat', kind: 'growth', title: txt('server.missions.defs.r_growth.title'), target: 20, step: 10, reward: { pouch_gold_10: 1 } },
   { id: 'r_gacha_dia', type: 'repeat', kind: 'gacha_dia', title: txt('server.missions.defs.r_gacha_dia.title'), target: 30, step: 10, reward: { tickets: 1 } },
-  { id: 'r_dungeon', type: 'repeat', kind: 'dungeon_win', title: txt('server.missions.defs.r_dungeon.title'), target: 5, step: 3, reward: { diamonds: 30 } },
+  { id: 'r_dungeon', type: 'repeat', kind: 'dungeon_win', title: txt('server.missions.defs.r_dungeon.title'), target: 5, step: 3, reward: { diamonds: 300 } },
 ]
 
 // 플레이어 미션 상태(player_state.missions jsonb): 리셋 날짜·주 번호, 오늘·이번 주에 받은 id, 이번 주 일일 보너스 받은 날 수,

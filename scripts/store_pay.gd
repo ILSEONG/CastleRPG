@@ -58,7 +58,7 @@ func buy(id: String) -> bool:
 	if not ready_to_buy():
 		Economy.notice.emit(ReleasePlatform.iap_off_text())
 		return false
-	if not Net.up:
+	if not Net.up or (provider() == "google" and Economy.account_tag == ""):  # 계정 표시 없이 결제하면 서버가 영수증을 받지 않는다
 		Economy.notice.emit(Economy.WAIT_TEXT)
 		return false
 	var now := Time.get_ticks_msec() / 1000.0
@@ -117,6 +117,7 @@ func _on_sent(d: Dictionary, token: String, answer: Callable, product := "") -> 
 		Economy.apply_server(d)
 		Economy.shop_changed.emit()
 		Economy.dungeons_changed.emit()
+		Economy.fetch_mail()  # 받는 것은 우편으로(2026-11-05)
 		Economy.notice.emit(DONE_TEXT)
 	if answer.is_valid():
 		answer.call(true)

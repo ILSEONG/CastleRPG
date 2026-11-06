@@ -1,4 +1,5 @@
 // 경제 규칙(순수 함수, 시간은 인자 — 유닉스 초). 앱 economy.gd(개정 7)·game_data.gd(개정 8)와 같은 규칙.
+import * as N from './names.ts'
 import { randomBytes } from 'node:crypto'
 import { txt } from './texts.ts'
 
@@ -626,6 +627,27 @@ export interface UpgradeDef {
 }
 export const UPGRADE_UNITS = ['pct', 'pp']
 export const upgradeStepCost = (d: UpgradeDef, level: number) => roundHalfAway(Number(d.cost_base) * Number(d.cost_growth) ** level)
+// 성장 단계(2026-11-05 사용자): 성장 → 고급(adv_) → 최고급(sup_) → 초월(tra_). "성장에서 모든 게 다 만렙을 찍으면 앞에 고급이 붙은걸로
+// 똑같이 렙업, 같은 레벨의 성장보다 훨씬 비싸게", 이어서 "최고급 성장과 초월 성장도 똑같이".
+// 단계 t의 행은 바로 아래 단계의 행이 전부 최대 레벨일 때만 올릴 수 있고, 효과는 접두사를 뗀 같은 이름의 성장에 더한다.
+export const UPGRADE_TIER_PREFIXES = ['', 'adv_', 'sup_', 'tra_']
+export const upgradeTier = (id: string) => {
+  for (let t = UPGRADE_TIER_PREFIXES.length - 1; t > 0; t--) if (id.startsWith(UPGRADE_TIER_PREFIXES[t])) return t
+  return 0
+}
+export const upgradeBaseId = (id: string) => id.slice(UPGRADE_TIER_PREFIXES[upgradeTier(id)].length)
+export const upgradeLocked = (upgrades: UpgradeDef[], levels: Record<string, number>, id: string) => {
+  const t = upgradeTier(id)
+  return t > 0 && upgrades.some((u) => upgradeTier(u.id) === t - 1 && (levels[u.id] ?? 0) < Number(u.max_level))
+}
+// 성장 효과(분수, 0.05 = +5%) = 그 성장 + 모든 단계의 같은 이름 성장. 레벨은 0..max_level로 자른다.
+export function upgradePct(upgrades: UpgradeDef[], levels: Record<string, number>, id: string): number {
+  let out = 0
+  for (const d of upgrades) {
+    if (upgradeBaseId(d.id) === id) out += (Math.min(Math.max(levels[d.id] ?? 0, 0), Number(d.max_level)) * Number(d.per_level)) / 100
+  }
+  return out
+}
 // level에서 count번 올리는 비용 합계
 export function upgradeCost(d: UpgradeDef, level: number, count: number): number {
   let gold = 0
@@ -872,6 +894,13 @@ export function helperCandidates(heroDefs: Record<string, any>[], owned: { def: 
 export const FRIEND_CAP = 30 // 친구 + 보낸 신청 상한
 export const FRIEND_RECOMMEND = 5 // 추천 친구 수(최근 3일 안에 접속한 다른 플레이어)
 export const FRIEND_RECENT_SEC = 3 * 86400
+// 친구 다이아 선물(2026-11-05 사용자 "하루에 다이아 선물은 최대 3000개야 (인당 100개) … 하루 3000개를 넘길 수 없어"):
+// → 바꿈(2026-11-05 16:25Z 사용자 "보내는거 50씩 해서 1500/받는거 50씩해서 1500 이렇게 해"): 친구 한 명에게 하루 한 번 50개,
+// 보내는 사람 하루 합계 1,500개, 받는 사람 하루 합계 1,500개.
+// → 다시 바꿈(2026-11-06 사용자 "보내는것도 3000개 받는것도 3000개 / 한명에게 보내는거 100개"): 친구 한 명에게 하루 100개, 보내기·받기 각각 하루 3,000개.
+// 하루 = 리셋 날짜(00:00 KST).
+export const FRIEND_GIFT_DIA = 100
+export const FRIEND_GIFT_DAILY = 3000
 
 // 플레이어 이름: id(uuid)에서 정해지는 별명(같은 id면 늘 같다 — 길드 guild.ts playerName과 같은 규칙·같은 낱말).
 const NICK_A = [txt('server.rules.nick_a'), txt('server.rules.nick_a_2'), txt('server.rules.nick_a_3'), txt('server.rules.nick_a_4'), txt('server.rules.nick_a_5'), txt('server.rules.nick_a_6'), txt('server.rules.nick_a_7'), txt('server.rules.nick_a_8'), txt('server.rules.nick_a_9'), txt('server.rules.nick_a_10'), txt('server.rules.nick_a_11'), txt('server.rules.nick_a_12'), txt('server.rules.nick_a_13'), txt('server.rules.nick_a_14')]
@@ -886,7 +915,12 @@ function mixName(...xs: number[]): number {
   return h >>> 0
 }
 
+// 자동 별명 모양(앞말 + 뒷말 + 숫자 0~2자리)인가 — 닉네임으로 남의 자동 별명을 흉내 내지 못하게(2026-11-06 보안 점검)
+export const looksDefaultName = (name: string) => NICK_A.some((a) => name.startsWith(a) && NICK_B.some((b) => name.slice(a.length).startsWith(b) && /^\d{0,2}$/.test(name.slice(a.length + b.length))))
+
 export function friendName(id: string): string {
+  const own = N.customName(id) // 고른 닉네임이 있으면 그것(names.ts)
+  if (own) return own
   const hex = id.replace(/-/g, '')
   const r = mulberry32(mixName(parseInt(hex.slice(0, 8), 16), parseInt(hex.slice(8, 16), 16)))
   const pick = (a: string[]) => a[Math.floor(r() * a.length)]
@@ -1023,10 +1057,7 @@ export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item
 export interface StatLimit { equip: Record<string, { hp: number; atk: number }>; hp: number; atk: number }
 export function statLimit(pl: { upgrades: Record<string, number>; research: Record<string, number>; items: EquipItem[]; equipment: { hero_id: string; item_id: number }[]; slot_levels?: SlotLevels },
   game: { upgrades: UpgradeDef[]; research: ResearchDef[] }, guildBuffPct: number): StatLimit {
-  const up = (id: string) => {
-    const d = game.upgrades.find((u) => u.id === id)
-    return d ? (Math.min(Math.max(pl.upgrades[id] ?? 0, 0), Number(d.max_level)) * Number(d.per_level)) / 100 : 0
-  }
+  const up = (id: string) => upgradePct(game.upgrades, pl.upgrades, id)
   const rb = researchBonus(game.research, pl.research ?? {})
   const g = 1 + Math.max(0, guildBuffPct) / 100
   return { equip: heroEquip(pl.items ?? [], pl.equipment ?? [], pl.slot_levels ?? {}), hp: (1 + up('hp')) * (1 + rb.hero_hp_pct / 100) * g, atk: (1 + up('atk')) * (1 + rb.hero_atk_pct / 100) * g }
