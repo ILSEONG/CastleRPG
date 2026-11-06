@@ -24,6 +24,7 @@ const Lang := preload("res://scripts/lang.gd")
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
+const ArenaKit := preload("res://scripts/arena_kit.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const GraphicsScript := preload("res://scripts/graphics.gd")
 const CastleScript := preload("res://scripts/castle.gd")
@@ -758,6 +759,7 @@ func _build_environment() -> void:
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = Color(0.78, 0.80, 0.86)
 	e.ambient_light_energy = 0.9
+	ArenaKit.grade(e)
 	env.environment = e
 	add_child(env)
 	_env = e
@@ -787,6 +789,8 @@ func _build_ground(interior_half: float) -> void:
 	var offs := FormationScript.gate_offsets(interior_half)
 	mat.set_shader_parameter("gate_off", absf(float(offs[0])) if absf(float(offs[0])) > 0.01 else (absf(float(offs[-1])) if offs.size() > 1 else 0.0))
 	mat.set_shader_parameter("lane_depth", interior_half - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN)
+	mat.set_shader_parameter("outer_road_half", Balance.TILE * 1.6)  # 성 밖 흙길(맵 퀄리티 2026-11-06)
+	mat.set_shader_parameter("center_lane", 1.0 if offs.size() % 2 == 1 else 0.0)
 	_ground_mat = mat
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane

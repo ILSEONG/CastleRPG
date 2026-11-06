@@ -164,6 +164,8 @@ func _build_stage() -> void:
 	mat.set_shader_parameter("lane_depth", half - Balance.STAIR_W - Formation.GATE_PASS_MARGIN)
 	mat.set_shader_parameter("grass_a", Color(0.47, 0.58, 0.36))
 	mat.set_shader_parameter("grass_b", Color(0.44, 0.55, 0.33))
+	mat.set_shader_parameter("outer_road_half", Balance.TILE * 1.6)  # 맵 퀄리티(2026-11-06): 성문 밖 흙길
+	mat.set_shader_parameter("center_lane", 0.0)
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -184,6 +186,11 @@ func _build_stage() -> void:
 	for i in 4:
 		peaks.append(TownKit.mountain(rng))
 	ArenaKit._scatter(root, peaks, 18, 120.0, 170.0, rng, 1.3, 1.9, 1, 1.1)
+	var wall_out := half + Balance.WALL_T + 1.0
+	var lane := absf(float(Formation.gate_offsets(half)[0]))
+	var road := Balance.TILE * 1.6 + 1.2
+	ArenaKit.grass_detail(root, 700, Rect2(-110, -110, 220, 220), func(p: Vector2) -> bool:  # 풀포기·들꽃·자갈(흙길 위는 비움)
+		return maxf(absf(p.x), absf(p.y)) > wall_out and absf(minf(absf(p.x), absf(p.y)) - lane) > road, rng)
 	_build_castle(root)
 
 

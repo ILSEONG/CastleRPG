@@ -9,6 +9,7 @@ extends RefCounted
 const Art := preload("res://scripts/art.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
+const Graphics := preload("res://scripts/graphics.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const GlowShader := preload("res://shaders/glow.gdshader")
 const SmokeShader := preload("res://shaders/smoke.gdshader")
@@ -31,6 +32,7 @@ const LANTERN_H := 1.6
 const SANDSTONE := Color(0.80, 0.70, 0.54)
 const SANDSTONE_LIGHT := Color(0.88, 0.80, 0.64)
 const SANDSTONE_DARK := Color(0.64, 0.55, 0.42)
+const PATH_STONE := Color(0.72, 0.66, 0.54)  # 사원 참배길 판석(맵 퀄리티 2026-11-06)
 const STATUE := Color(0.55, 0.60, 0.56)  # 이끼 낀 회녹색 돌
 const MOSS := Color(0.40, 0.55, 0.30)
 const ROOF_RED := Color(0.66, 0.22, 0.16)
@@ -129,6 +131,9 @@ const MINE_DARK := Color(0.05, 0.04, 0.03)
 const CRYSTAL_FLOOR := Color(0.30, 0.33, 0.39)  # 수정 광산 바닥(강화석 던전)
 const CRYSTAL_GLINT := Color(0.62, 0.92, 1.0)
 
+const GRADE_SATURATION := 1.08
+const GRADE_CONTRAST := 1.08
+
 static var _meshes := {}  # 부품·불꽃·연기·상자·빛기둥 메시(id마다 하나)
 static var _mats := {}
 
@@ -136,6 +141,14 @@ static var _mats := {}
 ## 화면 기준 자리 → 월드 바닥.
 static func spot(u: float, v: float) -> Vector3:
 	return DOWN * u + RIGHT * v
+
+
+## 맵 퀄리티(2026-11-06): 모든 3D 장면 공통 색 보정 — 채도·대비를 조금 올려 파스텔처럼 뜬 색을 또렷하게(필름 톤매핑은 밝은 맵이 바래 보여 뺐다).
+## 내 성(main.gd)·던전·PVP·길드 드래곤·길드전·파티 무대가 같이 쓴다.
+static func grade(e: Environment) -> void:
+	e.adjustment_enabled = true
+	e.adjustment_saturation = GRADE_SATURATION
+	e.adjustment_contrast = GRADE_CONTRAST
 
 
 ## 조명 설정(무대 빌더의 light) → WorldEnvironment + 해 + 점광원(최대 3, 그림자 없음)을 담은 노드.
@@ -149,6 +162,7 @@ static func lighting(cfg: Dictionary) -> Node3D:
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = cfg.ambient
 	e.ambient_light_energy = cfg.ambient_energy
+	grade(e)
 	env.environment = e
 	root.add_child(env)
 	var sun := DirectionalLight3D.new()
@@ -217,6 +231,40 @@ static func plains() -> Dictionary:
 	return {"root": root, "heroes": heroes, "enemies": enemies, "boss": spot(-22.0, 0.0), "light": {
 		"background": Color(0.72, 0.85, 0.96), "ambient": Color(0.80, 0.84, 0.90), "ambient_energy": 0.95,
 		"sun_color": Color(1.0, 0.96, 0.86), "sun_energy": 1.2, "sun_rot": Vector3(-52, -40, 0), "shadows": true, "omni": []}}
+
+
+## 맵 퀄리티(2026-11-06): 풀밭 결 — 풀포기·들꽃·자갈을 무리(2~6포기) 지어 parent 좌표 area 안 ok(Vector2)가 참인 곳에 흩는다.
+## 높이 ≤ 0.65 m × 크기, 그림자 없음, 변형마다 MultiMesh 하나. 그래픽 품질 낮음이면 만들지 않고, 중간이면 절반만.
+## small = 싸움 자리 안용: 풀포기만, 크기 0.6~0.75(높이 ≤ 0.42 m).
+static func grass_detail(parent: Node3D, clumps: int, area: Rect2, ok: Callable, rng: RandomNumberGenerator, pal := {}, small := false) -> void:
+	if Graphics.quality() == "low":
+		return
+	var variants := []
+	for i in 3:
+		variants.append(TownKit.grass_tuft(rng, pal))
+	if not small:
+		for i in 2:
+			variants.append(TownKit.flower_tuft(rng, pal))
+		variants.append(TownKit.pebbles(rng))
+	var by := {}
+	if Graphics.quality() != "high":  # 중간 품질은 절반
+		clumps = int(clumps * 0.5)
+	for i in clumps:
+		var c := Vector2(rng.randf_range(area.position.x, area.end.x), rng.randf_range(area.position.y, area.end.y))
+		if not ok.call(c):
+			continue
+		var v := rng.randi_range(0, variants.size() - 1)
+		for g in rng.randi_range(2, 6):
+			var q := c + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(0.0, 2.2)
+			if not ok.call(q):
+				continue
+			var vv := v if rng.randf() < 0.7 else rng.randi_range(0, 2)
+			if not by.has(vv):
+				by[vv] = []
+			var sc := rng.randf_range(0.6, 0.75) if small else rng.randf_range(1.0, 1.5)
+			by[vv].append(Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * sc), Vector3(q.x, 0, q.y)))
+	for v in by:
+		parent.add_child(_multimesh(variants[v], by[v], Art.lowpoly_vc_material(), false))
 
 
 ## 낮은 언덕: 아주 납작하게 누른 각진 20면체(밑면 평평), 풀색 면마다 명암. 반지름 7~12 m, 높이 ≈ 0.37 × 반지름.
@@ -322,6 +370,7 @@ static func crystal_mine() -> Dictionary:
 		elif mi.material_override is ShaderMaterial and mi.mesh is PlaneMesh:  # 바닥
 			mi.material_override.set_shader_parameter("grass_a", CRYSTAL_FLOOR)
 			mi.material_override.set_shader_parameter("grass_b", CRYSTAL_FLOOR.darkened(0.05))
+			mi.material_override.set_shader_parameter("patch_hue", Vector3(-0.03, 0.0, 0.05))  # 얼룩도 차가운 푸른빛
 	for p in root.find_children("*", "CPUParticles3D", true, false):
 		p.color = CRYSTAL_GLINT
 	var light: Dictionary = st.light
@@ -654,8 +703,9 @@ static func temple(grow_z := 0.0, grow_x := 0.0) -> Dictionary:
 	mat.shader = GroundShader
 	mat.set_shader_parameter("tile_size", 2.0)
 	mat.set_shader_parameter("interior_half", 0.0)
-	mat.set_shader_parameter("grass_a", Color(0.42, 0.56, 0.32))
-	mat.set_shader_parameter("grass_b", Color(0.39, 0.53, 0.30))
+	mat.set_shader_parameter("grass_a", Color(0.35, 0.48, 0.29))  # 맵 퀄리티: 조금 짙은 숲 풀색(채도 보정 뒤 형광 연두가 되지 않게)
+	mat.set_shader_parameter("grass_b", Color(0.33, 0.455, 0.275))
+	mat.set_shader_parameter("patch_strength", 0.16)
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -687,6 +737,11 @@ static func temple(grow_z := 0.0, grow_x := 0.0) -> Dictionary:
 	for f in [TownKit.tree_pine, TownKit.tree_round, TownKit.tree_round, TownKit.bush]:
 		trees.append(f.call(rng))
 	_scatter(root, trees, 80, TEMPLE_FIGHT_R + 9.0 + maxf(grow_z, grow_x), 110.0, rng, 0.9, 1.3, 3)
+	var hx := TEMPLE_HALF + grow_x
+	grass_detail(site, 520, Rect2(-hx - 30.0, -TEMPLE_HALF - grow_z - 30.0, 2.0 * hx + 60.0, 2.0 * TEMPLE_HALF + grow_z * 2.0 + 55.0), func(p: Vector2) -> bool:
+		return p.length() > TEMPLE_FIGHT_R + 1.0 + maxf(grow_z, grow_x) * 0.5 and absf(p.x) > 3.2 and not (p.y < -12.0 - grow_z and absf(p.x) < hx + 2.5), rng)
+	grass_detail(site, 140, Rect2(-hx, -12.0 - grow_z, 2.0 * hx, 12.0 + TEMPLE_HALF + grow_z * 2.0), func(p: Vector2) -> bool:
+		return absf(p.x) > 3.0 and absf(absf(p.x) - 5.0) > 0.8, rng, {}, true)  # 앞뜰 풀밭(싸움 자리)에 낮은 풀포기 — 참배길·돌등 줄은 비운다
 	var peaks := []
 	for i in 4:
 		peaks.append(TownKit.mountain(rng))
@@ -718,7 +773,10 @@ static func _temple_floor(k, rng: RandomNumberGenerator, gz := 0.0, gx := 0.0) -
 			var yard := z0 < yard_z
 			if not path and not yard and rng.randf() > 0.12:
 				continue
-			var c := SANDSTONE_LIGHT if path else SANDSTONE.darkened(rng.randf_range(0.0, 0.12))
+			# 맵 퀄리티(2026-11-06): 참배길도 판마다 명암이 다른 낡은 판석(예전 SANDSTONE_LIGHT 한 색은 햇빛에 하얗게 날았다), 가장자리 판은 이끼
+			var c := PATH_STONE.darkened(rng.randf_range(0.0, 0.12)) if path else SANDSTONE.darkened(rng.randf_range(0.12, 0.26))
+			if path and absf(x0 + 0.93) > 1.0 and rng.randf() < 0.3:
+				c = c.lerp(MOSS, 0.3)
 			if not path and rng.randf() < (0.1 if yard else 0.4):
 				c = c.lerp(MOSS, 0.45)
 			var y := rng.randf_range(0.02, 0.05)
