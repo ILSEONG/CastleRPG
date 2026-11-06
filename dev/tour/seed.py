@@ -5,6 +5,7 @@
 """
 import json
 import random
+import time
 import sys
 import urllib.request
 
@@ -53,6 +54,22 @@ call("POST", "/v1/nickname", {"name": "일성성주"}, mt)
 call("POST", "/v1/test/stage", {"stage": 52}, mt)
 call("POST", "/v1/test/levels", {"levels": BUILD, "res": {"wood": 8_500_000, "stone": 6_200_000, "food": 9_100_000}, "gold": 48_000_000}, mt)
 call("POST", "/v1/test/grant_diamonds", {"amount": 120_000}, mt)
+
+
+def place_all(tok):
+    """테스트 훅으로 레벨만 정한 건물은 자리가 없다(기본 자리가 없는 자유 건설 건물) — 성주가 [건설]로 고르듯 빈 자리에 하나씩 놓는다."""
+    cells = [(x, y) for y in range(-11, 12, 3) for x in range(-11, 12, 3)]
+    random.Random(3).shuffle(cells)
+    for bid in ("farm", "watchtower", "guild_hall", "forge", "warehouse", "dispatch", "goldmine"):
+        for cxy in list(cells):
+            if call("POST", "/v1/building/move", {"building": bid, "cell": list(cxy)}, tok, ok_fail=True):
+                cells.remove(cxy)
+                break
+        else:
+            print("no cell for", bid)
+
+
+place_all(mt)
 for h in HEROES:
     if h not in ("chronos", "jujak", "cheongryong", "hyeonmu"):  # UR 몇은 아직 없음(모집 화면에서 보이게)
         call("POST", "/v1/test/grant_hero", {"hero_id": h}, mt)
@@ -73,7 +90,15 @@ call("POST", "/v1/test/events", {"events": {"kill": 3000, "stage_clear": 40, "ga
 for mode, pts in (("duel", 1830), ("total", 1540)):
     call("POST", "/v1/test/pvp_points", {"mode": mode, "points": pts}, mt, ok_fail=True)
 for h in HEROES:
-    call("POST", "/v1/hero/levelup", {"hero_id": h, "count": random.choice([29, 39, 49])}, mt, ok_fail=True)
+    call("POST", "/v1/hero/levelup", {"hero_id": h, "count": 49}, mt, ok_fail=True)
+# 출전: 보유한 UR·SSR 영웅부터 성채 영웅 칸 수만큼(전투 클립에서 지지 않게)
+GRADE = {l.split(",")[0]: l.split(",")[3] for l in open("data/heroes.csv", encoding="utf-8").read().splitlines()[1:] if l.strip()}
+owned = [h for h in HEROES if h not in ("chronos", "jujak", "cheongryong", "hyeonmu")]
+best = sorted(owned, key=lambda h: {"UR": 0, "SSR": 1, "SR": 2}.get(GRADE[h], 3))
+for n in range(1, 21):
+    if call("POST", "/v1/deploy", {"deploy": best[:n]}, mt, ok_fail=True):
+        print("deploy", best[:n])
+        break
 my_code = call("GET", "/v1/friends", token=mt)["code"]
 print("main", mid, "code", my_code)
 
@@ -121,6 +146,7 @@ ALL = ["안녕하세요! 오늘 길드 보스 같이 잡아요", "리치의 무�
        "총력전 시즌 언제 끝나요?", "골드 던전 40단계 깼습니다", "발렌 영웅 진짜 세네요", "거래소에 LR 무기 올렸어요", "새로 시작했어요 잘 부탁드립니다"]
 for (t, pid, n), text in zip(bots, ALL):
     call("POST", "/v1/chat", {"channel": "all", "text": text}, t, ok_fail=True)
+time.sleep(2.5)  # 채팅은 한 사람이 2초에 한 번
 GUILD = ["오늘 출석 다들 하셨나요?", "길드 기부 골드로 했어요", "토요일 9시 길드전 수비 영웅 정해 주세요", "보스 2판 남았어요 화이팅"]
 for (t, pid, n), text in zip(bots[:4], GUILD):
     call("POST", "/v1/chat", {"channel": "guild", "text": text}, t, ok_fail=True)
@@ -128,8 +154,7 @@ for (t, pid, n), text in zip(bots[:4], GUILD):
 # 거래소: AI 성주들이 장비를 올린다
 for i, (t, pid, n) in enumerate(bots[:6]):
     call("POST", "/v1/test/grant_items", {"grades": random.sample(["SR", "SSR", "UR", "LR"], 2)}, t)
-    pl = me(t) or {}
-    for it in (pl.get("items") or [])[:2]:
+    for it in ((call("GET", "/v1/items", token=t) or {}).get("items") or [])[:2]:
         call("POST", "/v1/market/list", {"item_id": it["id"], "currency": "gold", "price": random.choice([250_000, 800_000, 1_500_000, 4_200_000])}, t, ok_fail=True)
 
 # 공지·우편(주인공이 관리자)

@@ -20,6 +20,8 @@ var _taps: Array = []  # [pos, age]
 var _tap_layer: Control
 var tabs
 var menu
+var _follow_fight := false
+var _follow_t := 0.0
 
 
 func _ready() -> void:
@@ -39,6 +41,12 @@ func _ready() -> void:
 	Net.auth_path = device.get_base_dir().path_join("auth.json")
 	if not FileAccess.file_exists(Net.auth_path):
 		Net.set_auth("guest")
+	if _item == "guide":  # 테스트 장면은 가이드를 건너뛴다 — 새 성주 계정이라 서버 가이드 진행을 따르게 다시 켠다
+		await get_tree().process_frame
+		await get_tree().process_frame
+		Tutorial.save_path = ""
+		Tutorial.tours_on = true
+		Tutorial.go_online()
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	_build_overlay()
@@ -112,6 +120,25 @@ func _process(delta: float) -> void:
 	_taps = _taps.filter(func(t): return t[1] < 0.7)
 	if _tap_layer != null:
 		_tap_layer.queue_redraw()
+	if _follow_fight:
+		_follow_t -= real
+		if _follow_t <= 0.0:
+			_follow_t = 2.5
+			var ms := get_tree().get_nodes_in_group("monsters").filter(func(m): return is_instance_valid(m) and m is Node3D and m.is_inside_tree())
+			if not ms.is_empty():
+				var best := Vector3.ZERO
+				var best_n := 0
+				for a in ms:  # 몬스터가 가장 많이 모인 곳(12m 안 수)
+					var pa: Vector3 = (a as Node3D).global_position
+					var n := 0
+					for b in ms:
+						if pa.distance_to((b as Node3D).global_position) < 12.0:
+							n += 1
+					if n > best_n:
+						best_n = n
+						best = pa
+				print("TOUR follow ", best, " n=", best_n, " of ", ms.size())
+				_cam().pan_to(Vector3(best.x, 0, best.z) * 0.85, 1.5)  # 무리 조금 안쪽(성벽 위 영웅도 보이게)
 
 
 func _draw_taps() -> void:
@@ -413,7 +440,7 @@ func _run_battle() -> void:
 		_find("res://scripts/hud.gd").request_stage()
 	await _wait(4.0)
 	var rig = _cam()
-	rig.zoom_by(0.6)
+	_follow_fight = true  # 몬스터가 가장 많이 몰린 곳으로 카메라를 천천히 옮긴다
 	_say("적이 성문으로 몰려옵니다 — 성문 앞 병사와 성벽 위 원거리 영웅이 막습니다")
 	await _wait(8.0)
 	_say("왼쪽 아래 배속 x1 → x1.5 → x2")
@@ -430,12 +457,14 @@ func _run_battle() -> void:
 	if st != null:
 		st.open()
 	await _wait(4.5)
-	_close_all()
-	_tap(Vector2(360, 200))
-	_say("보스 라운드 — 큰 몸집의 보스를 쓰러뜨리면 다음 장으로")
+	st.close()
+	await _wait(0.3)
+
+	_say("위 성문 체력(북·동·남·서)이 바닥나기 전에 적을 막아 라운드를 넘깁니다")
 	await _wait(14.0)
 	_say("")
 	await _wait(6.0)
+	_follow_fight = false
 	if sp != null:
 		sp.set_level(1.0)
 
@@ -602,10 +631,8 @@ func _run_party() -> void:
 	await _until(func(): return Party.state() == "confirm", 15.0)
 	await _wait(1.5)
 	Party.accept(true)
-	var b = null
-	await _until(func():
-		b = _find("res://scripts/party_battle.gd")
-		return b != null, 20.0)
+	await _until(func(): return _find("res://scripts/party_battle.gd") != null, 20.0)
+	var b = _find("res://scripts/party_battle.gd")
 	_say("내 영웅을 눌러 고르고 바닥을 눌러 움직입니다 — 보스 패턴을 피하세요")
 	var t := 0.0
 	Engine.time_scale = 1.5
@@ -763,20 +790,25 @@ func _run_admin() -> void:
 
 
 func _run_guide() -> void:
-	await _intro("가이드 퀘스트", "처음 시작한 성주를 한 단계씩 이끄는 가이드 (265개)")
-	_say("아래 가이드 카드 — 지금 할 일과 보상, 화살표가 누를 곳을 가리킵니다")
-	await _wait(4.0)
+	await _intro("가이드 퀘스트", "처음 시작한 성주를 한 단계씩 이끄는 메이플 키우기식 가이드 (265개)")
 	var card = _find("res://scripts/tutorial_card.gd")
-	for i in 6:
-		var b := _btn("이동", card) if card != null else null
-		if b == null and card != null:
-			b = _btn("받기", card)
-		if b != null:
-			_tap_ctl(b)
+	_say("아래 가이드 카드 — 지금 할 일과 보상, 화살표가 누를 곳을 가리킵니다", 120)
+	await _wait(4.0)
+	for st in [0, 3, 6, 10, 16, 24, 40, 70]:
+		if st > 0:
+			await _req("/v1/test/tut_step", {"step": st})
+			await _wait(1.5)
+		var m: Dictionary = Tutorial.mission()
+		_say("가이드 %d — %s" % [st + 1, str(m.get("title", m.get("text", "")))] if not m.is_empty() else "", 120)
+		await _wait(1.5)
+		if card != null and card.action_button != null and card.action_button.is_visible_in_tree():
+			_tap_ctl(card.action_button)
 		await _wait(3.5)
 		_close_all()
+		_close_tray()
+		await _wait(0.5)
 	_say("")
-	await _wait(2.0)
+	await _wait(1.5)
 
 
 func _close_tray() -> void:
