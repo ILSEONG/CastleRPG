@@ -8,6 +8,10 @@ extends "res://scripts/monster.gd"
 ## 5) 영혼 수확: 체력이 HARVEST_AT(50%·20%) 밑으로 처음 내려가면 무적 보호막 + 영혼 수정 CRYSTALS개(각 최대 체력 × CRYSTAL_HP).
 ##    HARVEST_SEC초 안에 수정을 모두 깨면 막이 깨지고 리치가 BREAK_STUN초 기절 + 받는 피해 +BREAK_VULN%. 못 깨면 남은 수정마다 영웅 모두에게
 ##    공격 × HARVEST_MULT 피해, 리치는 최대 체력 × HEAL_PER 회복.
+## 맵 전체 공격(2026-11-06 사용자 "맵 영역에 광범위 공격을 하는 것들도 — 로스트아크 참조"):
+## 6) 죽음의 장막: WIPE_SEC마다 무덤 바닥 전체가 붉게 차오르고(WIPE_TELE초) 푸른 안전지대 SAFE_N개(반경 SAFE_R)만 빈다 →
+##    안전지대 밖 영웅 모두 공격 × WIPE_MULT.
+## 7) 영혼 폭풍: DONUT_SEC마다 리치 둘레 DONUT_R m만 빼고 바닥 전체 예고(DONUT_TELE초) → 리치 품으로 파고들지 않은 영웅 모두 공격 × DONUT_MULT, 밀쳐 냄.
 ## 판단·피해는 방장 기기만(party_battle.role == "host"). 연출은 event(…)로 남기면 꼭두각시 기기가 play_event로 똑같이 그린다.
 
 const BOLT_SEC := 7.0
@@ -35,7 +39,17 @@ const HARVEST_MULT := 1.6
 const HEAL_PER := 0.08
 const BREAK_STUN := 4.0
 const BREAK_VULN := 30.0
+const WIPE_SEC := 32.0
+const WIPE_TELE := 4.0
+const WIPE_MULT := 2.2
+const SAFE_N := 3
+const SAFE_R := 2.6
+const DONUT_SEC := 26.0
+const DONUT_TELE := 2.6
+const DONUT_R := 4.5
+const DONUT_MULT := 1.6
 
+const FIELD_R := preload("res://scripts/party_arena.gd").FIGHT_R
 const SOUL := Color(0.35, 1.0, 0.80)
 const CURSE := Color(0.62, 0.32, 0.95)
 const DEATH := Color(0.55, 0.15, 0.85)
@@ -45,6 +59,8 @@ var bolt_cd := 4.0
 var ring_cd := 10.0
 var raise_cd := 14.0
 var curse_cd := 7.0
+var wipe_cd := 30.0
+var donut_cd := 16.0
 var harvest_left := 0.0  # > 0: 영혼 수확 중(무적)
 var casts := {}  # 스킬별 쓴 횟수(테스트)
 
@@ -54,6 +70,7 @@ var _shield: Node3D
 var _tele := ""
 var _tele_t := 0.0
 var _curse_spots: Array = []
+var _safe: Array = []  # 죽음의 장막 안전지대 [[중심, 반경]…]
 var _zones: Array = []  # [위치, 남은 초]
 var _block_fx := 0.0
 
@@ -103,9 +120,15 @@ func _process(delta: float) -> void:
 	ring_cd -= delta
 	raise_cd -= delta
 	curse_cd -= delta
+	wipe_cd -= delta
+	donut_cd -= delta
 	if not is_alive() or is_stunned() or _swing_left >= 0.0 or _model.is_busy():
 		return
-	if ring_cd <= 0.0 and _near_heroes(RING_R + 1.5) > 0:
+	if wipe_cd <= 0.0:
+		wipe()
+	elif donut_cd <= 0.0:
+		donut()
+	elif ring_cd <= 0.0 and _near_heroes(RING_R + 1.5) > 0:
 		ring()
 	elif curse_cd <= 0.0:
 		curse()
@@ -248,6 +271,62 @@ func _tick_zones(delta: float) -> void:
 				h.apply_vulnerable(CURSE_VULN, 1.0)
 
 
+# --- 6) 죽음의 장막(맵 전체 — 안전지대만 빈다) ---
+
+func wipe() -> void:
+	wipe_cd = WIPE_SEC
+	ring_cd = maxf(ring_cd, 4.0)  # 장막 바로 뒤에 고리가 겹치지 않게
+	casts.wipe = int(casts.get("wipe", 0)) + 1
+	_safe.clear()
+	var flat := []
+	var base := _rng().randf() * TAU
+	for i in SAFE_N:
+		var a := base + TAU * i / SAFE_N + _rng().randf_range(-0.35, 0.35)
+		var p := Vector3(cos(a), 0, sin(a)) * _rng().randf_range(6.0, 11.0)
+		if battle != null:
+			p = battle.clamp_field(battle.field_center() + p)
+		_safe.append([p, SAFE_R])
+		flat.append_array([snappedf(p.x, 0.01), snappedf(p.z, 0.01)])
+	_start_tele("wipe", WIPE_TELE)
+	if battle != null:
+		battle.danger_outside(_safe, WIPE_TELE)
+	_event(["wipe", flat])
+	play_event(["wipe", flat])
+
+
+func _wipe_hit() -> void:
+	_event(["wipe_hit"])
+	play_event(["wipe_hit"])
+	for h in _heroes():
+		var safe := false
+		for sf in _safe:
+			if Formation.flat_distance(sf[0], h.global_position) <= float(sf[1]) + 0.3:
+				safe = true
+		if not safe:
+			h.take_damage(hit_damage() * WIPE_MULT, self)
+
+
+# --- 7) 영혼 폭풍(리치 품만 빈다) ---
+
+func donut() -> void:
+	donut_cd = DONUT_SEC
+	casts.donut = int(casts.get("donut", 0)) + 1
+	_start_tele("donut", DONUT_TELE)
+	if battle != null:
+		battle.danger_outside([[Vector3(global_position.x, 0, global_position.z), DONUT_R]], DONUT_TELE)
+	_event(["donut"])
+	play_event(["donut"])
+
+
+func _donut_hit() -> void:
+	_event(["donut_hit"])
+	play_event(["donut_hit"])
+	for h in _heroes():
+		if Formation.flat_distance(global_position, h.global_position) > DONUT_R + 0.3:
+			h.take_damage(hit_damage() * DONUT_MULT, self)
+			h.knockback(global_position, 2.0)
+
+
 # --- 5) 영혼 수확 ---
 
 func _check_harvest() -> void:
@@ -323,6 +402,10 @@ func _tick_tele(delta: float) -> void:
 		_ring_hit()
 	elif k == "curse":
 		_curse_land()
+	elif k == "wipe":
+		_wipe_hit()
+	elif k == "donut":
+		_donut_hit()
 
 
 func is_telegraphing() -> bool:
@@ -351,6 +434,33 @@ func play_event(ev: Array) -> void:
 			Fx.nova(par, global_position, DEATH, RING_R, 2)
 			Fx.quake(par, global_position, RING_R * 0.6, 1)
 			Fx.kick(par, global_position, 0.3, 0.05)
+		"wipe":
+			_model.play_cast("Spellcast_Long", WIPE_TELE, 0.85)
+			Fx.charge(self, DEATH, 2, WIPE_TELE)
+			var c: Vector3 = battle.field_center() if battle != null else Vector3.ZERO
+			Fx.telegraph_circle(par, c, FIELD_R, WIPE_TELE)
+			var flat: Array = ev[1]
+			for i in range(0, flat.size() - 1, 2):
+				Fx.safe_circle(par, Vector3(float(flat[i]), 0, float(flat[i + 1])), SAFE_R, WIPE_TELE)
+			if battle != null:
+				battle.boss_line("wipe")
+		"wipe_hit":
+			var c: Vector3 = battle.field_center() if battle != null else global_position
+			Fx.nova(par, c, DEATH, FIELD_R, 2)
+			Fx.screen_flash(self, global_position, DEATH, 0.45)
+			Fx.shake_camera(self)
+		"donut":
+			_model.play_cast("Spellcast_Raise", DONUT_TELE, 0.85)
+			Fx.charge(self, SOUL, 2, DONUT_TELE)
+			var c: Vector3 = battle.field_center() if battle != null else Vector3.ZERO
+			Fx.telegraph_circle(par, c, FIELD_R, DONUT_TELE)
+			Fx.safe_circle(par, global_position, DONUT_R, DONUT_TELE)
+			if battle != null:
+				battle.boss_line("donut")
+		"donut_hit":
+			Fx.nova(par, global_position, SOUL, FIELD_R, 2)
+			Fx.quake(par, global_position, DONUT_R + 2.0, 1)
+			Fx.shake_camera(self)
 		"raise":
 			_model.play_cast("Spellcast_Raise", 0.9)
 			Fx.halo(par, global_position + Vector3(0, 1.4, 0), SOUL, 3.2, 0.6)

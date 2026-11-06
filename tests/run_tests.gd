@@ -772,6 +772,21 @@ func test_formation_claims() -> void:
 	check(above >= FormationScript.capacity(wall) and absf(FormationScript.perp(0).dot(FormationScript.slot_position(g.castle_half, 0, wall, above))) < 0.01,
 		"claim_near on the gate top takes the slot right above the gate (not used by auto placement)")
 	check(g.claim_near(20, 0, wall, 0.0) == -1 and g.assignment(20).is_empty(), "claim_near on a full wall fails and assigns nothing")
+	# claim_spread(2026-11-06 사용자 "기본적으로 한 성문에는 한 영웅이 지키게 해"): 성문 2·3개 면에서 근접·원거리가 서로 다른 성문을 맡는다
+	for keep in [9, 22]:
+		var sp = FormationScript.new()
+		sp.castle_half = GameData.interior_half(keep)
+		var n := FormationScript.gates_per_side(sp.castle_half)
+		var gates_taken := []
+		for i in n:
+			var post: int = gate if i % 2 == 0 else wall
+			var sl: int = sp.claim_spread(i, 1, post)
+			gates_taken.append(FormationScript.slot_gate(sp.castle_half, post, sl))
+		gates_taken.sort()
+		check(n >= 2 and gates_taken == range(n) and sp.claim_spread(n, 1, gate) >= 0,
+			"keep %d: %d heroes on one side (gate, wall, ...) each take a different gate, the next one still gets a slot: %s" % [keep, n, gates_taken])
+	var one = FormationScript.new()
+	check(one.claim_spread(0, 0, gate) == 0 and one.claim_spread(1, 0, wall) == 0, "one gate per side: claim_spread = claim (first free slot)")
 
 
 func test_formation_positions() -> void:
@@ -3871,8 +3886,8 @@ func test_dungeon_tables() -> void:
 	check(GameData.apply_reset("gold", d, DG_MID) == {"best_level": 4, "keys": 3, "extra_today": 0, "last_reset": DG_MID}
 		and GameData.apply_reset("gold", d, DG_MID + 2 * 86400.0 + 5.0).keys == 9 and GameData.apply_reset("gold", d, DG_MID + 3 * 86400.0).keys == 10
 		and GameData.apply_reset("gold", {"best_level": 0, "keys": 12, "extra_today": 0, "last_reset": DG_LAST}, DG_MID + 9 * 86400.0).keys == 12
-		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 3 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
-		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 3), extra runs back to 0, a clock set back changes nothing")
+		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 10 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
+		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 10), extra runs back to 0, a clock set back changes nothing")
 	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(1) == 100000
 		and GameData.extra_cost(10) == 278000 and GameData.extra_cost(50) == 25804000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
 		"fresh dungeon = today's keys; extra run cost fixed per level: 100000 x 1.12^(n-1) ceiled to the thousand; party 6 / 4")
@@ -3899,7 +3914,7 @@ func test_ticket_dungeon_offline() -> void:
 		e.heroes[id] = 1
 	var st: Dictionary = e.dungeon_state("ticket")
 	var hs: Array = st.helpers
-	check(st.keys == 3 and st.key_cap == 3 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 5}
+	check(st.keys == 3 and st.key_cap == 10 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 5}
 		and e.dungeon_reward("ticket", 5) == {"tickets": 5} and e.dungeon_reward("ticket", 6) == {"tickets": 6} and e.dungeon_reward("ticket", 11) == {"tickets": 7} and GameData.party_size("ticket") == 4, "ticket dungeon: 3 / 3 keys, 3 helpers, 5 tickets (+1 per 5 levels): %s" % [hs])
 	var top := []
 	for id in e.heroes:
@@ -3926,7 +3941,7 @@ func test_ticket_dungeon_offline() -> void:
 		and not st2.helpers.any(func(h): return h.hero_id == helper) and e.dungeon_block("ticket", 2, party, helper) == "helper_used",
 		"win: key -1, +5 tickets, that helper is used for today: %s" % [st2])
 	e.clock_offset = 86400.0
-	check(e.dungeon_state("ticket").keys == 3 and e.dungeon_state("ticket").helpers_used == [], "next day: keys back to 3 (cap) and every helper again")
+	check(e.dungeon_state("ticket").keys == 5 and e.dungeon_state("ticket").helpers_used == [], "next day: keys 2 + 3 = 5 (cap 10) and every helper again")
 	e.clock_offset = 0.0
 	# 전투 장면(도우미 영웅·골렘 조각)은 tests/ticket_check.tscn(오토로드가 필요하다)
 
@@ -3944,7 +3959,7 @@ func test_dungeons_offline() -> void:
 		e.heroes[id] = 1
 	var gs: Dictionary = e.dungeon_state("gold")
 	var es: Dictionary = e.dungeon_state("equip")
-	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 2 and es.key_cap == 3 and es.extra_cost == 100000
+	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 2 and es.key_cap == 10 and es.extra_cost == 100000
 		and absf(gs.next_reset - GameData.next_reset(t0)) < 1.0 and gs.reset_in > 0.0 and gs.reset_in <= 86400.0, "new game: gold 3 / 10, equip 2 / 3, next reset at 00:00 KST")
 	check(e.dungeon_reward("gold", 2) == {"gold": 22000} and e.dungeon_reward("equip", 10).count == 5 and e.dungeon_reward("equip", 10).weights.LR == 0.5
 		and e.dungeon_enemies("gold", 1).size() == 3, "reward preview and enemy list")
@@ -3997,7 +4012,7 @@ func test_dungeons_offline() -> void:
 	check(not e.finish_dungeon("nope", true, 30.0) or finished[-1].get("error") == "unknown_run", "an unknown run is refused")
 	# 강화석 던전(2026-10-29): 영웅 5, 열쇠 2 / 3, 이기면 강화석 30 + 3씩
 	var ss: Dictionary = e.dungeon_state("stone")
-	check(ss.keys == 2 and ss.key_cap == 3 and GameData.party_size("stone") == 5 and e.dungeon_reward("stone", 1) == {"stones": 30} and e.dungeon_reward("stone", 10) == {"stones": 57}
+	check(ss.keys == 2 and ss.key_cap == 10 and GameData.party_size("stone") == 5 and e.dungeon_reward("stone", 1) == {"stones": 30} and e.dungeon_reward("stone", 10) == {"stones": 57}
 		and e.dungeon_enemies("stone", 1).map(func(x): return x.kind) == ["ratman", "ratman", "ogre_warlord"], "stone dungeon: 2 / 3 keys, 5 heroes, 30 stones (+3 per level), rat men + mine ogre")
 	var st0: int = e.stones
 	check(e.start_dungeon("stone", 1, GOLD6.slice(0, 5)) and e.debug_win() and finished[-1].win and finished[-1].rewards == {"stones": 30} and e.stones == st0 + 30

@@ -5,6 +5,11 @@ extends "res://scripts/monster.gd"
 ## 2) 독니 돌진: LUNGE_SEC마다 병사가 가장 많이 모인 곳에 반경 LUNGE_R 예고(LUNGE_TELE초) → 그리로 뛰어올라 내려찍는다(공격 × LUNGE_MULT + 독).
 ## 3) 알 낳기: BROOD_SEC마다 둘레에 알 주머니 BROOD_N개(party_minion — HATCH_SEC 안에 깨지 않으면 새끼 거미 4마리씩).
 ## 4) 산성 비: ACID_SEC마다 병사들 위로 산 덩이 ACID_N개 — 바닥 예고(ACID_TELE초) 뒤 떨어져 공격 × ACID_MULT, 받는 피해 +ACID_VULN%.
+## 맵 전체 공격(2026-11-06 사용자 "맵 영역에 광범위 공격을 하는 것들도 — 로스트아크 참조"):
+## 5) 산성 홍수: FLOOD_SEC마다 둥지 바닥 전체가 차오르고(FLOOD_TELE초) 푸른 안전지대 SAFE_N개(반경 SAFE_R)만 빈다 →
+##    밖에 있는 병사 모두 공격 × FLOOD_MULT, 받는 피해 +ACID_VULN%.
+## 6) 독 줄기 쓸기: SWEEP_SEC마다 둥지를 가로지르는 나란한 줄 SWEEP_N개(너비 SWEEP_W, 간격 SWEEP_GAP) 예고(SWEEP_TELE초) →
+##    줄 위 병사 모두 공격 × SWEEP_MULT. 줄 사이 틈으로 비키면 피한다.
 ## 판단·피해는 방장 기기만. 연출은 event(…)로 남기면 꼭두각시 기기가 play_event로 똑같이 그린다.
 
 const SpiderModel := preload("res://scripts/spider_model.gd")
@@ -28,6 +33,18 @@ const ACID_TELE := 1.6
 const ACID_MULT := 1.3
 const ACID_VULN := 20.0
 const SIZE := 2.4  # 키(m)
+const FLOOD_SEC := 34.0
+const FLOOD_TELE := 4.0
+const FLOOD_MULT := 2.0
+const SAFE_N := 3
+const SAFE_R := 3.4  # 병사 무리가 들어갈 만큼
+const SWEEP_SEC := 24.0
+const SWEEP_TELE := 2.4
+const SWEEP_N := 3
+const SWEEP_W := 5.0
+const SWEEP_GAP := 9.0  # 줄 가운데 사이(틈 = 간격 − 너비)
+const SWEEP_MULT := 1.8
+const FIELD_R := preload("res://scripts/party_arena.gd").FIGHT_R
 
 const WEB := Color(0.92, 0.92, 0.88)
 const VENOM := Color(0.55, 0.95, 0.25)
@@ -37,6 +54,8 @@ var web_cd := 4.0
 var lunge_cd := 8.0
 var brood_cd := 11.0
 var acid_cd := 15.0
+var flood_cd := 26.0
+var sweep_cd := 15.0
 var casts := {}
 
 var _tele := ""
@@ -45,6 +64,8 @@ var _lunge_to := Vector3.ZERO
 var _lunge_from := Vector3.ZERO
 var _air := -1.0
 var _acid_spots: Array = []
+var _safe: Array = []  # 산성 홍수 안전지대 [[중심, 반경]…]
+var _sweep_a := 0.0  # 독 줄기 방향(라디안)
 
 
 func _ready() -> void:
@@ -89,9 +110,15 @@ func _process(delta: float) -> void:
 	lunge_cd -= delta
 	brood_cd -= delta
 	acid_cd -= delta
+	flood_cd -= delta
+	sweep_cd -= delta
 	if not is_alive() or is_stunned() or _swing_left >= 0.0 or _model.is_busy():
 		return
-	if lunge_cd <= 0.0 and _root_t <= 0.0:
+	if flood_cd <= 0.0:
+		flood()
+	elif sweep_cd <= 0.0:
+		sweep()
+	elif lunge_cd <= 0.0 and _root_t <= 0.0:
 		lunge()
 	elif acid_cd <= 0.0:
 		acid()
@@ -129,6 +156,10 @@ func _tick_tele(delta: float) -> void:
 			_lunge_from = Vector3(global_position.x, 0, global_position.z)
 		"acid":
 			_acid_land()
+		"flood":
+			_flood_hit()
+		"sweep":
+			_sweep_hit()
 
 
 func is_telegraphing() -> bool:
@@ -137,6 +168,89 @@ func is_telegraphing() -> bool:
 
 func push_mass() -> float:
 	return INF if is_telegraphing() else super.push_mass()
+
+
+# --- 5) 산성 홍수(맵 전체 — 안전지대만 빈다) ---
+
+func flood() -> void:
+	flood_cd = FLOOD_SEC
+	acid_cd = maxf(acid_cd, 5.0)
+	casts.flood = int(casts.get("flood", 0)) + 1
+	var rng: RandomNumberGenerator = battle.rng if battle != null else RandomNumberGenerator.new()
+	_safe.clear()
+	var flat := []
+	var base := rng.randf() * TAU
+	for i in SAFE_N:
+		var a := base + TAU * i / SAFE_N + rng.randf_range(-0.35, 0.35)
+		var p := Vector3(cos(a), 0, sin(a)) * rng.randf_range(6.0, 11.0)
+		if battle != null:
+			p = battle.clamp_field(battle.field_center() + p)
+		_safe.append([p, SAFE_R])
+		flat.append_array([snappedf(p.x, 0.01), snappedf(p.z, 0.01)])
+	_start_tele("flood", FLOOD_TELE)
+	if battle != null:
+		battle.danger_outside(_safe, FLOOD_TELE)
+	var ev := ["flood", flat]
+	_event(ev)
+	play_event(ev)
+
+
+func _flood_hit() -> void:
+	_event(["flood_hit"])
+	play_event(["flood_hit"])
+	for u in _units():
+		var safe := false
+		for sf in _safe:
+			if Formation.flat_distance(sf[0], u.global_position) <= float(sf[1]) + 0.3:
+				safe = true
+		if not safe:
+			u.take_damage(hit_damage() * FLOOD_MULT, self)
+			u.apply_vulnerable(ACID_VULN, 4.0)
+
+
+# --- 6) 독 줄기 쓸기(나란한 줄 — 틈으로 피한다) ---
+
+func sweep() -> void:
+	sweep_cd = SWEEP_SEC
+	casts.sweep = int(casts.get("sweep", 0)) + 1
+	var rng: RandomNumberGenerator = battle.rng if battle != null else RandomNumberGenerator.new()
+	_sweep_a = snappedf(rng.randf() * PI, 0.001)
+	_start_tele("sweep", SWEEP_TELE)
+	if battle != null:
+		for l in sweep_lanes(_sweep_a):
+			battle.danger_lane(l[0], l[1], SWEEP_W, SWEEP_TELE)
+	var ev := ["sweep", _sweep_a]
+	_event(ev)
+	play_event(ev)
+
+
+## 방향 a의 나란한 줄들 [[시작, 끝]…] — 둥지 가운데를 지나는 줄 하나 + 양옆 SWEEP_GAP마다.
+static func sweep_lanes(a: float) -> Array:
+	var dir := Vector3(cos(a), 0, sin(a))
+	var side := Vector3(-dir.z, 0, dir.x)
+	var out := []
+	for i in SWEEP_N:
+		var off := (i - (SWEEP_N - 1) * 0.5) * SWEEP_GAP
+		var half := sqrt(maxf(1.0, FIELD_R * FIELD_R - off * off))
+		out.append([side * off - dir * half, side * off + dir * half])
+	return out
+
+
+func _sweep_hit() -> void:
+	_event(["sweep_hit", _sweep_a])
+	play_event(["sweep_hit", _sweep_a])
+	var lanes := sweep_lanes(_sweep_a)
+	for u in _units():
+		for l in lanes:
+			if _lane_d(l, Vector3(u.global_position.x, 0, u.global_position.z)) <= SWEEP_W * 0.5 + 0.2:
+				u.take_damage(hit_damage() * SWEEP_MULT, self)
+				break
+
+
+static func _lane_d(l: Array, p: Vector3) -> float:
+	var ab: Vector3 = l[1] - l[0]
+	var t := clampf((p - l[0]).dot(ab) / maxf(0.0001, ab.length_squared()), 0.0, 1.0)
+	return Formation.flat_distance(p, l[0] + ab * t)
 
 
 # --- 1) 거미줄 발사 ---
@@ -308,6 +422,33 @@ func play_event(ev: Array) -> void:
 			_model.play_skill("brood")
 			Fx.splash(par, _model.abdomen_tip(), VENOM, 1.4)
 			Fx.halo(par, _model.abdomen_tip(), VENOM, 2.4, 0.6)
+		"flood":
+			_model.play_skill("acid", FLOOD_TELE * 0.8)
+			Fx.spark(par, _model.abdomen_tip(), VENOM, 2.0)
+			var c: Vector3 = battle.field_center() if battle != null else Vector3.ZERO
+			Fx.telegraph_circle(par, c, FIELD_R, FLOOD_TELE)
+			var flat: Array = ev[1]
+			for k in range(0, flat.size() - 1, 2):
+				Fx.safe_circle(par, Vector3(float(flat[k]), 0, float(flat[k + 1])), SAFE_R, FLOOD_TELE)
+			if battle != null:
+				battle.boss_line("flood")
+		"flood_hit":
+			var c: Vector3 = battle.field_center() if battle != null else global_position
+			Fx.nova(par, c, VENOM, FIELD_R, 2)
+			Fx.screen_flash(self, global_position, VENOM, 0.4)
+			Fx.shake_camera(self)
+		"sweep":
+			_model.play_skill("web", SWEEP_TELE)
+			for l in sweep_lanes(float(ev[1])):
+				Fx.telegraph_lane(par, l[0], l[1], SWEEP_W, SWEEP_TELE)
+			if battle != null:
+				battle.boss_line("sweep")
+		"sweep_hit":
+			for l in sweep_lanes(float(ev[1])):
+				for k in 5:
+					var p2: Vector3 = l[0].lerp(l[1], (k + 0.5) / 5.0)
+					Fx.impact(par, p2, VENOM, SWEEP_W * 0.45, 1)
+			Fx.shake_camera(self)
 		"acid":
 			_model.play_skill("acid", 0.5)
 			Fx.spark(par, _model.abdomen_tip(), VENOM, 1.4)

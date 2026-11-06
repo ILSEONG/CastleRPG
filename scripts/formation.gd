@@ -45,6 +45,52 @@ func claim(hero_id: int, side: int, post: int) -> int:
 	return -1
 
 
+## 기본 자리(2026-11-06 사용자 "성주가 직접 배치하는게 아니라면 기본적으로 한 성문에는 한 영웅이 지키게 해"): 면 side에서
+## 아직 아무 영웅도 맡지 않은 성문(앞 번호부터)에 가장 가까운 post 빈 슬롯을 차지한다. 슬롯이 맡는 성문 = 옆 위치가 가장 가까운 성문.
+## 성문 2·3개 성(성채 Lv9+)에서 한 면의 근접(성문 앞)·원거리(성벽 위)가 같은 성문에 몰려 옆 성문이 비던 것을 막는다.
+## 모든 성문을 누가 맡고 있거나 성문이 1개면 claim과 같다(앞 번호 빈 슬롯). 직접 옮긴 자리(claim_near)는 그대로.
+func claim_spread(hero_id: int, side: int, post: int) -> int:
+	var n := gates_per_side(castle_half)
+	var current: Dictionary = _claims.get(hero_id, {})
+	if n <= 1 or (not current.is_empty() and current.side == side and current.post == post):
+		return claim(hero_id, side, post)
+	var covered := {}
+	var taken := {}
+	for id in _claims:
+		var c: Dictionary = _claims[id]
+		if id == hero_id or c.side != side:
+			continue
+		covered[slot_gate(castle_half, c.post, c.slot)] = true
+		if c.post == post:
+			taken[c.slot] = true
+	var offs: Array = gate_front_offsets(castle_half) if post == POST_GATE else wall_top_offsets(castle_half)
+	for k in n:
+		if covered.has(k):
+			continue
+		var at := gate_offset(castle_half, k, n)
+		var best := -1
+		for slot in capacity(post, n):
+			if not taken.has(slot) and (best < 0 or absf(float(offs[slot]) - at) < absf(float(offs[best]) - at)):
+				best = slot
+		if best >= 0 and slot_gate(castle_half, post, best) == k:
+			_claims[hero_id] = {"side": side, "post": post, "slot": best}
+			return best
+	return claim(hero_id, side, post)
+
+
+## 슬롯이 맡는 성문 번호(옆 위치가 가장 가까운 성문).
+static func slot_gate(half: float, post: int, slot: int) -> int:
+	var offs: Array = gate_front_offsets(half) if post == POST_GATE else wall_top_offsets(half)
+	if slot < 0 or slot >= offs.size():
+		return 0
+	var n := gates_per_side(half)
+	var best := 0
+	for k in n:
+		if absf(gate_offset(half, k, n) - float(offs[slot])) < absf(gate_offset(half, best, n) - float(offs[slot])):
+			best = k
+	return best
+
+
 ## 누른 지점에 가까운 자리: 면 side·post에서 성문 중앙 기준 옆 거리 offset에 가장 가까운 빈 슬롯(자기 슬롯 포함)을 차지하고 돌려준다.
 ## 같은 면 성벽 위 한쪽에 서 있던 영웅이 반대쪽을 누르면 그쪽 빈 자리로 옮긴다. 가장 가까운 게 자기 슬롯이면 그대로. 가득 차면 -1.
 func claim_near(hero_id: int, side: int, post: int, offset: float) -> int:

@@ -164,21 +164,21 @@ test('GET /v1/dungeon: 새 플레이어는 그날 지급분(골드 3/10, 장비 
   const r = await S.req('GET', '/v1/dungeon', { token })
   assert.equal(r.status, 200)
   const ticket = r.json.dungeons.ticket // 모집권 던전(ticket_dungeon.test.ts가 자세히 본다)
-  assert.deepEqual([ticket.keys, ticket.key_cap, ticket.helpers.length, ticket.helpers_used], [3, 3, 3, []])
+  assert.deepEqual([ticket.keys, ticket.key_cap, ticket.helpers.length, ticket.helpers_used], [3, 10, 3, []])
   delete r.json.dungeons.ticket
   assert.deepEqual(r.json, {
     server_now: T0,
     dungeons: {
       gold: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: LAST, next_reset: MIDNIGHT },
-      equip: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: LAST, next_reset: MIDNIGHT },
-      stone: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: null, last_reset: LAST, next_reset: MIDNIGHT }, // 강화석 던전
+      equip: { keys: 2, key_cap: 10, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: LAST, next_reset: MIDNIGHT },
+      stone: { keys: 2, key_cap: 10, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: null, last_reset: LAST, next_reset: MIDNIGHT }, // 강화석 던전
     },
   })
   assert.deepEqual((await S.req('GET', '/v1/items', { token })).json, { server_now: T0, items: [] })
   assert.equal((await S.req('GET', '/v1/dungeon')).status, 401)
 })
 
-test('일일 리셋(서버 시각): 자정(KST) 전엔 그대로, 자정에 +3, 5일 놓치면 상한 10, 장비 상한 3, 추가 도전 횟수 0 — 다음 쓰기에 저장된다', async () => {
+test('일일 리셋(서버 시각): 자정(KST) 전엔 그대로, 자정에 +3, 5일 놓치면 상한 10, 장비 상한 10, 추가 도전 횟수 0 — 다음 쓰기에 저장된다', async () => {
   const { token, id } = await fresh()
   await setDungeon(S.db.query, id, 'gold', { keys: 0 })
   await setDungeon(S.db.query, id, 'equip', { keys: 0, extra_today: 2 })
@@ -190,7 +190,7 @@ test('일일 리셋(서버 시각): 자정(KST) 전엔 그대로, 자정에 +3, 
   assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost, d.gold.next_reset], [3, 2, 0, 100000, MIDNIGHT + DAY])
   S.clock.t = MIDNIGHT + 4 * DAY + 100 // 5번
   d = await dg(token)
-  assert.deepEqual([d.gold.keys, d.equip.keys, d.gold.last_reset], [10, 3, MIDNIGHT + 4 * DAY])
+  assert.deepEqual([d.gold.keys, d.equip.keys, d.gold.last_reset], [10, 10, MIDNIGHT + 4 * DAY])
   const [row] = await S.db.query("select keys from player_dungeons where player_id = $1 and type = 'gold'", [id])
   assert.equal(row.keys, 0) // 읽기는 쓰지 않는다(게으른 리셋)
   // 소모하면 리셋한 값에서 뺀 값이 저장된다
@@ -769,7 +769,7 @@ test('부위 강화(/v1/slot/enhance): 영웅·부위마다 레벨, 비용 = 레
   assert.equal(R.heroEquip([it], eq, { ella: { hat: 20 } }).hans.hp, R.itemStats(it).hp) // 다른 영웅의 부위 레벨은 안 탄다
 })
 
-test('강화석 던전(2026-10-29): 영웅 5, 열쇠 하루 2·상한 3, 이기면 강화석 30 + 3 × (단계 − 1)·열쇠 −1, 지면 아무것도 안 바뀐다', async () => {
+test('강화석 던전(2026-10-29): 영웅 5, 열쇠 하루 2·상한 10, 이기면 강화석 30 + 3 × (단계 − 1)·열쇠 −1, 지면 아무것도 안 바뀐다', async () => {
   const { token } = await fresh()
   const party = GOLD6.slice(0, 5)
   assert.equal((await start(token, { type: 'stone', level: 1, party: GOLD6 })).json.error, 'bad_party') // 6명은 안 된다
@@ -795,7 +795,7 @@ test('마이그레이션 063 전 라이브 DB(제약에 stone 없음·설정 값
   try {
     const { token, id } = await fresh()
     const p = await player(token)
-    assert.deepEqual([p.dungeons.stone.keys, p.dungeons.stone.key_cap, p.dungeons.gold.keys], [2, 3, 3])
+    assert.deepEqual([p.dungeons.stone.keys, p.dungeons.stone.key_cap, p.dungeons.gold.keys], [2, 10, 3])
     const rows = await S.db.query('select type from player_dungeons where player_id = $1 order by type', [id])
     assert.deepEqual(rows.map((r) => r.type), ['equip', 'gold', 'ticket'])
     assert.equal((await player(token)).dungeons.stone.keys, 2) // 다시 읽어도 된다

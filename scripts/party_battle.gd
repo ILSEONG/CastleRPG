@@ -77,7 +77,7 @@ var net
 
 var _uid := 100  # 보스 = 100, 졸개 = 101부터(영웅·병사는 1부터)
 var _events: Array = []
-var _zones: Array = []  # [중심, 반경, 끝나는 clock, id]
+var _zones: Array = []  # [중심, 반경, 끝나는 clock, id, 종류(in 원 안·out 안전지대 밖 전부·lane 직선), 덧(out = [[중심, 반경]…], lane = [시작, 끝, 너비])]
 var _zone_seq := 0
 var _snap_cd := 0.0
 var _mine_down := false  # 내 영웅이 쓰러져 있다(일어나면 다시 고른다)
@@ -318,14 +318,50 @@ func unit_by_uid(uid: int):
 ## 보스 범위 예고(방장): AI 영웅·병사가 비킨다.
 func danger(pos: Vector3, r: float, sec: float) -> void:
 	_zone_seq += 1
-	_zones.append([Vector3(pos.x, 0, pos.z), r, clock + sec, _zone_seq])
+	_zones.append([Vector3(pos.x, 0, pos.z), r, clock + sec, _zone_seq, "in", null])
+
+
+## 맵 전체 공격(2026-11-06 사용자 "맵 영역에 광범위 공격 — 로스트아크 참조"): safe([[중심, 반경]…]) 안만 빼고 전부 맞는다.
+func danger_outside(safe: Array, sec: float) -> void:
+	_zone_seq += 1
+	_zones.append([Vector3.ZERO, FIELD_R, clock + sec, _zone_seq, "out", safe])
+
+
+## 직선 범위: from → to, 너비 width.
+func danger_lane(from: Vector3, to: Vector3, width: float, sec: float) -> void:
+	_zone_seq += 1
+	_zones.append([Vector3.ZERO, 0.0, clock + sec, _zone_seq, "lane", [Vector3(from.x, 0, from.z), Vector3(to.x, 0, to.z), width]])
+
+
+## 바닥 p(반지름 rad)가 그 예고에 걸리는가(margin = 여유).
+static func zone_covers(z: Array, p: Vector3, rad: float, margin: float) -> bool:
+	var flat := Vector3(p.x, 0, p.z)
+	match str(z[4]):
+		"out":
+			for sf in z[5]:
+				if Formation.flat_distance(flat, sf[0]) + rad * 0.5 + margin * 0.5 <= float(sf[1]):
+					return false
+			return true
+		"lane":
+			return lane_distance(z[5], flat) < float(z[5][2]) * 0.5 + rad + margin
+		_:
+			return Formation.flat_distance(flat, z[0]) < float(z[1]) + rad + margin
+
+
+## 직선 [시작, 끝, 너비]의 가운데 선까지 바닥 거리.
+static func lane_distance(lane: Array, p: Vector3) -> float:
+	var a: Vector3 = lane[0]
+	var b: Vector3 = lane[1]
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / maxf(0.0001, ab.length_squared()), 0.0, 1.0)
+	return Formation.flat_distance(p, a + ab * t)
 
 
 ## p(반지름 rad)를 덮고 있는 예고 범위들의 id(AI 영웅이 범위마다 반응 시간·놓침을 정한다 — party_hero.gd).
 func zones_at(p: Vector3, rad: float) -> Array:
 	var out := []
 	for z in _zones:
-		if float(z[2]) >= clock and Formation.flat_distance(Vector3(p.x, 0, p.z), z[0]) < float(z[1]) + rad + 0.5:
+		if float(z[2]) >= clock and zone_covers(z, p, rad, 0.5):
 			out.append(int(z[3]))
 	return out
 
@@ -336,11 +372,35 @@ func escape_from(p: Vector3, rad: float, only: Array = []) -> Vector3:
 	for z in _zones:
 		if float(z[2]) < clock or (not only.is_empty() and not only.has(int(z[3]))):
 			continue
+		if not zone_covers(z, flat, rad, 0.5):
+			continue
+		match str(z[4]):
+			"out":  # 가장 가까운 안전지대 가운데로(지금 쪽으로 조금 비켜 서로 겹치지 않게)
+				var best := Vector3.INF
+				var best_d := INF
+				for sf in z[5]:
+					var d := Formation.flat_distance(flat, sf[0])
+					if d < best_d:
+						best_d = d
+						best = sf[0]
+				if best == Vector3.INF:
+					continue
+				return best + ((flat - best).normalized() * 0.6 if best_d > 0.6 else Vector3.ZERO)
+			"lane":  # 직선에 수직으로, 가까운 쪽 가장자리 밖으로(막히면 반대쪽)
+				var lane: Array = z[5]
+				var dir: Vector3 = (lane[1] - lane[0]).normalized()
+				var side := Vector3(-dir.z, 0, dir.x)
+				var off_now := (flat - Vector3(lane[0])).dot(side)
+				var need := float(lane[2]) * 0.5 + rad + 0.9
+				var first := 1.0 if off_now >= 0.0 else -1.0
+				for sgn in [first, -first]:
+					var out := clamp_field(flat + side * (sgn * need - off_now))
+					if not _in_zone(out, rad):
+						return out
+				return clamp_field(flat + side * (first * need - off_now))
 		var c: Vector3 = z[0]
 		var r: float = float(z[1]) + rad + 0.5
 		var d := Formation.flat_distance(flat, c)
-		if d >= r:
-			continue
 		var dir := (flat - c).normalized() if d > 0.05 else ArenaKit.DOWN
 		for turn in [0.0, 0.6, -0.6, 1.2, -1.2, PI]:
 			var out := clamp_field(c + dir.rotated(Vector3.UP, turn) * (r + 0.4))
@@ -352,7 +412,7 @@ func escape_from(p: Vector3, rad: float, only: Array = []) -> Vector3:
 
 func _in_zone(p: Vector3, rad: float) -> bool:
 	for z in _zones:
-		if float(z[2]) >= clock and Formation.flat_distance(p, z[0]) < float(z[1]) + rad + 0.3:
+		if float(z[2]) >= clock and zone_covers(z, p, rad, 0.3):
 			return true
 	return false
 
@@ -387,6 +447,14 @@ func boss_line(key: String) -> void:
 			hud.flash(Lang.t("party_battle.boss_line_2"), 2.5, GOOD)
 		"hatch":
 			hud.flash(Lang.t("party_battle.boss_line_3"), 1.6, BAD)
+		"wipe":
+			hud.flash(Lang.t("party_battle.boss_line_4"), 3.5, BAD)
+		"donut":
+			hud.flash(Lang.t("party_battle.boss_line_5"), 2.4, BAD)
+		"flood":
+			hud.flash(Lang.t("party_battle.boss_line_6"), 3.5, BAD)
+		"sweep":
+			hud.flash(Lang.t("party_battle.boss_line_7"), 2.2, BAD)
 
 
 # --- 진행 ---

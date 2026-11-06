@@ -18,12 +18,18 @@ const SKILL_TEXT := {
 	"lunge": "도약: 가장 많이 모인 곳으로 뛰어들어 독을 뿌립니다",
 	"brood": "알 낳기: 8초 안에 못 깨면 거미 부하 4마리가 부화합니다",
 	"acid": "산성 비: 원 6개가 예고된 뒤 떨어집니다",
+	"wipe": "죽음의 장막: 바닥 전체! 푸른 안전지대 3곳만 안전",
+	"donut": "영혼 폭풍: 리치 곁 푸른 원만 안전",
+	"flood": "산성 홍수: 바닥 전체! 푸른 안전지대 3곳만 안전",
+	"sweep": "독 줄기: 나란한 줄 3개 — 줄 사이 틈으로",
 }
 
 var _main
 var _quest := "lich"
 var _speed := 1.5
 var _tier := 3
+var _lv := 25
+var _showcase := false  # --showcase: 맵 전체 공격을 빨리 보여 준다(장막·폭풍·홍수·독 줄기 첫 시전을 앞당김)
 var _caption: Label
 var _cap_left := 0.0
 
@@ -36,6 +42,10 @@ func _ready() -> void:
 			_tier = int(a.substr(7))
 		elif a.begins_with("--speed="):
 			_speed = float(a.substr(8))
+		elif a.begins_with("--lv="):
+			_lv = int(a.substr(5))
+		elif a == "--showcase":
+			_showcase = true
 	Economy.save_path = ""
 	Fever.save_path = ""
 	Guild.save_path = ""
@@ -46,7 +56,7 @@ func _ready() -> void:
 	Tutorial.state = "skipped"
 	for h in GameData.heroes():
 		Economy.heroes[str(h.id)] = 1
-		Economy.hero_levels[str(h.id)] = 25
+		Economy.hero_levels[str(h.id)] = _lv
 	Economy.soldiers = {"infantry:%d" % _tier: 8, "archer:%d" % _tier: 8}
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
@@ -85,7 +95,13 @@ func _ready() -> void:
 		b = _battle()
 	_say("")
 	var seen := {}
+	var primed := false
 	while not b.done:
+		if _showcase and not primed and is_instance_valid(b.boss) and b.phase == b.Phase.FIGHT:
+			primed = true
+			for k in {"wipe_cd": 6.0, "donut_cd": 16.0, "flood_cd": 6.0, "sweep_cd": 15.0}:
+				if k in b.boss:
+					b.boss.set(k, {"wipe_cd": 6.0, "donut_cd": 16.0, "flood_cd": 6.0, "sweep_cd": 15.0}[k])
 		if b.phase == b.Phase.FIGHT:
 			Engine.time_scale = _speed
 		if is_instance_valid(b.boss):

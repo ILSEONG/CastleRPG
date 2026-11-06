@@ -57,7 +57,7 @@ test('모집권 던전: 상태에 후보 3명, helper 없거나 후보 밖이면
   const p = await player(token)
   const t = p.dungeons.ticket
   assert.equal(t.keys, 3)
-  assert.equal(t.key_cap, 3)
+  assert.equal(t.key_cap, 10)
   assert.equal(t.helpers.length, 3)
   assert.deepEqual(t.helpers_used, [])
   assert.equal(p.dia_tickets, 0)
@@ -84,10 +84,10 @@ test('모집권 던전: 상태에 후보 3명, helper 없거나 후보 밖이면
   assert.deepEqual(q.dungeons.ticket.helpers_used, [helper])
   assert.ok(!q.dungeons.ticket.helpers.some((h: any) => h.hero_id === helper))
   assert.equal((await start(token, { type: 'ticket', level: 2, party, helper })).json.error, 'helper_used')
-  // 다음 날: 열쇠 +3(상한 3), 쓴 도우미 목록 비움
+  // 다음 날: 열쇠 +3(상한 10 — 2026-11-06), 쓴 도우미 목록 비움
   S.clock.t = T0 + 86400
   const n = await player(token)
-  assert.equal(n.dungeons.ticket.keys, 3)
+  assert.equal(n.dungeons.ticket.keys, 5)
   assert.deepEqual(n.dungeons.ticket.helpers_used, [])
 })
 

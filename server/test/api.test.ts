@@ -121,10 +121,10 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       upgrades: {}, // 개정 20
       dungeons: { // 개정 18: 그날 지급분, 리셋 = 15:00 UTC(00:00 KST) — T0는 23:13:20 KST
         gold: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800 },
-        equip: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: 1789916400, next_reset: 1790002800 },
-        ticket: { keys: 3, key_cap: 3, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800,
+        equip: { keys: 2, key_cap: 10, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: 1789916400, next_reset: 1790002800 },
+        ticket: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800,
           helpers, helpers_used: [] }, // 모집권 던전
-        stone: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800 }, // 강화석 던전(2026-10-29)
+        stone: { keys: 2, key_cap: 10, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800 }, // 강화석 던전(2026-10-29)
       },
       items: [], equipment: {},
       diamonds: 0, dia_tickets: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 40, dia_pity: 0, dia_ur_pity: 0 }, // 개정 23
