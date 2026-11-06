@@ -143,6 +143,7 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 
 
 ## 기본 자리(면 index % 4의 역할 자리). 게임 중 다시 만든 영웅(배치·승급·레벨 변경)은 다른 영웅들이 옮겨 와 그 자리가 차 있을 수 있다 —
 ## 같은 면 다른 자리 → 다른 면들(역할 자리 먼저) → 그래도 다 차면 그 면 성문 앞 바닥(자유 위치)에 선다.
+## 성문이 여럿인 면에서는 아직 아무도 맡지 않은 성문 쪽 자리부터(Formation.claim_spread — 2026-11-06 성문마다 한 명).
 func _place_default() -> void:
 	if castle == null:
 		post = Formation.POST_FREE  # 아레나: 쓰는 쪽이 free_pos를 정한다
@@ -152,7 +153,7 @@ func _place_default() -> void:
 	var second := Formation.POST_GATE if first == Formation.POST_WALL else Formation.POST_WALL
 	for k in 4:
 		for p in [first, second]:
-			if move_to((home + k) % 4, p):
+			if move_to((home + k) % 4, p, NAN, true):  # 면의 성문마다 한 명씩(claim_spread)
 				return
 	move_to_point(Formation.slot_position(castle.half, home, Formation.POST_GATE, 0))
 
@@ -291,13 +292,13 @@ func stand_position() -> Vector3:
 
 ## 자리 변경 명령. 목표 자리가 가득 차면 false (현재 자리 유지).
 ## near(성문 중앙 기준 옆 거리)를 주면 그 지점에 가장 가까운 빈 슬롯 — 같은 자리 안에서도 옮긴다(성벽 위 좌↔우).
-func move_to(p_side: int, p_post: int, near := NAN) -> bool:
+func move_to(p_side: int, p_post: int, near := NAN, spread := false) -> bool:
 	if p_side == side and p_post == post and not is_nan(near) and int(formation.assignment(index).get("slot", -1)) == slot \
 			and absf(Formation.perp(side).dot(stand_position()) - near) <= KEEP_SLOT_R:
 		_focus = null
 		_replan_stable()  # 같은 자리 근처를 다시 눌렀다: 자리는 그대로(옆 자리로 오가지 않게)
 		return true
-	var s: int = formation.claim(index, p_side, p_post) if is_nan(near) else formation.claim_near(index, p_side, p_post, near)
+	var s: int = formation.claim_near(index, p_side, p_post, near) if not is_nan(near) else (formation.claim_spread(index, p_side, p_post) if spread else formation.claim(index, p_side, p_post))
 	if s < 0:
 		return false
 	side = p_side

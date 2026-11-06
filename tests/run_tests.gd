@@ -772,6 +772,21 @@ func test_formation_claims() -> void:
 	check(above >= FormationScript.capacity(wall) and absf(FormationScript.perp(0).dot(FormationScript.slot_position(g.castle_half, 0, wall, above))) < 0.01,
 		"claim_near on the gate top takes the slot right above the gate (not used by auto placement)")
 	check(g.claim_near(20, 0, wall, 0.0) == -1 and g.assignment(20).is_empty(), "claim_near on a full wall fails and assigns nothing")
+	# claim_spread(2026-11-06 사용자 "기본적으로 한 성문에는 한 영웅이 지키게 해"): 성문 2·3개 면에서 근접·원거리가 서로 다른 성문을 맡는다
+	for keep in [9, 22]:
+		var sp = FormationScript.new()
+		sp.castle_half = GameData.interior_half(keep)
+		var n := FormationScript.gates_per_side(sp.castle_half)
+		var gates_taken := []
+		for i in n:
+			var post: int = gate if i % 2 == 0 else wall
+			var sl: int = sp.claim_spread(i, 1, post)
+			gates_taken.append(FormationScript.slot_gate(sp.castle_half, post, sl))
+		gates_taken.sort()
+		check(n >= 2 and gates_taken == range(n) and sp.claim_spread(n, 1, gate) >= 0,
+			"keep %d: %d heroes on one side (gate, wall, ...) each take a different gate, the next one still gets a slot: %s" % [keep, n, gates_taken])
+	var one = FormationScript.new()
+	check(one.claim_spread(0, 0, gate) == 0 and one.claim_spread(1, 0, wall) == 0, "one gate per side: claim_spread = claim (first free slot)")
 
 
 func test_formation_positions() -> void:
