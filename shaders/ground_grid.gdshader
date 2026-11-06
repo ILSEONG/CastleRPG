@@ -30,6 +30,20 @@ uniform float outside_line = 0.35;
 uniform float outer_road_half = 0.0;
 uniform float center_lane = 1.0;
 uniform vec4 path_color : source_color = vec4(0.53, 0.46, 0.35, 1.0);
+// 손그림 질감(맵 새로 만들기 2026-11-06): use_tex면 풀밭·성 안 포장·길을 Meshy 손그림 질감(assets/textures/ground)으로 칠한다.
+// 질감 한 장이 *_tex_m 미터마다 반복 — 반복이 눈에 띄지 않게 돌린 사본을 넓은 잡음으로 섞는다. 계절은 grass_a - grass_ref 만큼 더한다.
+// 질감 모드에서는 면 명암·얼룩·성 밖 격자선을 끈다(성 안 격자선은 건물 자리용으로 옅게).
+uniform bool use_tex = false;
+uniform sampler2D grass_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D paved_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D road_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float grass_tex_m = 14.0;
+uniform float paved_tex_m = 8.0;
+uniform float road_tex_m = 10.0;
+uniform vec4 grass_ref : source_color = vec4(0.441, 0.511, 0.372, 1.0);  // 질감 그대로일 때의 grass_a(여름). 계절이 grass_a를 바꾸면 그 차이만큼 더한다
+uniform float tex_gain = 0.85;  // 손그림 질감은 밝아서 해·주변광 아래 조금 낮춘다(포장·길)
+uniform float grass_gain = 0.66;  // 풀밭 질감(밝은 연두라 더 낮춘다)
+uniform float tex_line = 0.45;  // 질감 모드 성 안 격자선 세기 배율
 
 varying vec3 world_pos;
 
@@ -44,6 +58,14 @@ float vnoise(vec2 x) {
 	vec2 f = fract(x);
 	f = f * f * (3.0 - 2.0 * f);
 	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+vec3 tex_n(sampler2D s, vec2 w, float m) {
+	vec2 uv = w / m;
+	vec3 t1 = texture(s, uv).rgb;
+	vec3 t2 = texture(s, mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * uv * 0.71 + vec2(0.31, 0.17)).rgb;
+	float n = smoothstep(0.3, 0.7, vnoise(w / (m * 2.3) + 5.0));
+	return mix(t1, t2, n);
 }
 
 void vertex() {
@@ -75,6 +97,38 @@ void fragment() {
 			if (lane < w) base = mix(path_color.rgb, base, 0.15 * step(0.0, jag));
 		}
 	}
+	if (use_tex) {
+		vec2 w = world_pos.xz;
+		float dmax = max(a.x, a.y);
+		float along = min(a.x, a.y);
+		vec3 col;
+		if (dmax < interior_half) {
+			bool side_road = gate_off > 0.0 && ((abs(along - gate_off) < road_half && dmax > lane_depth - road_half)
+				|| (abs(dmax - lane_depth) < road_half && along < gate_off));
+			col = (along < road_half || side_road) ? tex_n(road_tex, w, road_tex_m) : tex_n(paved_tex, w, paved_tex_m);
+			col *= tex_gain;
+		} else {
+			col = tex_n(grass_tex, w, grass_tex_m) * grass_gain + (grass_a.rgb - grass_ref.rgb);
+			if (outer_road_half > 0.0) {
+				float lane = 1e5;
+				if (center_lane > 0.5) lane = along;
+				if (gate_off > 0.0) lane = min(lane, abs(along - gate_off));
+				float wr = outer_road_half * (1.0 - 0.25 * smoothstep(interior_half, interior_half + 80.0, dmax));
+				wr += (vnoise(w * 0.35) - 0.5) * 1.6;
+				float k = 1.0 - smoothstep(wr - 0.9, wr + 0.9, lane);
+				col = mix(col, tex_n(road_tex, w, road_tex_m) * tex_gain, k);
+			}
+			float edge_s = edge_snow;  // 겨울: 풀밭 질감 위에 눈 얼룩
+			col = mix(col, snow_color.rgb * 1.15, edge_s * smoothstep(0.45, 0.75, vnoise(w * 0.18)) * 0.8);
+		}
+		vec2 to_line_t = 0.5 - abs(fract(p) - 0.5);
+		vec2 aa_t = fwidth(p);
+		vec2 on_t = 1.0 - smoothstep(vec2(line_width), vec2(line_width) + aa_t, to_line_t);
+		float line_t = max(on_t.x, on_t.y) * (dmax < interior_half ? tex_line : 0.0);
+		ALBEDO = mix(max(col, vec3(0.0)), line_color.rgb, line_t * line_color.a);
+		ROUGHNESS = 1.0;
+		SPECULAR = 0.0;
+	} else {
 	// 로우폴리: 타일마다 대각선으로 나눈 두 삼각형에 서로 다른 명암
 	vec2 cell = floor(p);
 	float upper = step(fract(p).x, fract(p).y);
@@ -99,4 +153,5 @@ void fragment() {
 	ALBEDO = mix(base, line_color.rgb, line * line_color.a);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
+	}
 }

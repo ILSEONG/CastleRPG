@@ -3654,9 +3654,9 @@ func test_arena_kit() -> void:
 			"plains":
 				check(st.root.find_children("*", "MultiMeshInstance3D", true, false).size() >= 10, "plains: hills, trees, rocks, mountains as MultiMesh")
 			"mine":
-				check(effects == 2 and draws <= 5, "mine: lantern flames + gold glints effects, %d draws <= 5" % draws)
+				check(effects == 2 and draws <= 8, "mine: lantern flames + gold glints effects, %d draws <= 8 (+3 Meshy prop MultiMeshes: cliffs, ore, carts)" % draws)
 			"lair":
-				check(effects == 4 and draws <= 7, "lair: floor lava + lava fall + smoke + embers effects, %d draws <= 7" % draws)
+				check(effects == 4 and draws <= 9, "lair: floor lava + lava fall + smoke + embers effects, %d draws <= 9 (+2 Meshy prop MultiMeshes: treasure, obsidian)" % draws)
 			"colosseum":
 				var fans: Array = st.root.find_children("Fans", "MeshInstance3D", true, false)
 				check(fans.size() == 1 and fans[0].material_override.shader == ArenaKit.CheerShader and fans[0].cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

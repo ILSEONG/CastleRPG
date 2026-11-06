@@ -46,7 +46,7 @@ static func _xz(v: Vector3) -> Vector3:
 	return Vector3(v.x * S, v.y, v.z * S)
 
 
-static func _ground(a: Color, b: Color) -> MeshInstance3D:
+static func _ground(a: Color, b: Color, tex := "") -> MeshInstance3D:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(240, 240)
 	var mat := ShaderMaterial.new()
@@ -57,6 +57,8 @@ static func _ground(a: Color, b: Color) -> MeshInstance3D:
 	mat.set_shader_parameter("grass_b", b)
 	mat.set_shader_parameter("line_color", Color(0, 0, 0, 0.0))
 	mat.set_shader_parameter("facet_variation", 0.12)
+	if tex != "":  # 손그림 질감(맵 새로 만들기 2026-11-06)
+		ArenaKit.textured_ground(mat, tex, 10.0, "", "", 0.8)
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -64,10 +66,10 @@ static func _ground(a: Color, b: Color) -> MeshInstance3D:
 	return ground
 
 
-static func _commit(k, parent: Node3D) -> void:
+static func _commit(k, parent: Node3D, mat: Material = null) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = k.commit()
-	mi.material_override = Art.lowpoly_vc_material()
+	mi.material_override = mat if mat != null else Art.lowpoly_vc_material()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
 
@@ -90,7 +92,7 @@ static func _flames(parent: Node3D, spots: Array, scale: float, tint: Color) -> 
 static func crypt() -> Dictionary:
 	var root := Node3D.new()
 	root.name = "Crypt"
-	root.add_child(_ground(CRYPT_STONE, CRYPT_STONE.darkened(0.08)))
+	root.add_child(_ground(CRYPT_STONE, CRYPT_STONE.darkened(0.08), "crypt_floor"))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41
 	var site := Node3D.new()
@@ -112,13 +114,17 @@ static func crypt() -> Dictionary:
 			k.box(_xz(Vector3(side * 15.5, 0, z)), Vector3(2.4, 0.5, 2.4), CRYPT_DARK)
 			if h < 3.5:  # 무너진 기둥 조각
 				k.rock(_xz(Vector3(side * (14.0 + rng.randf() * 1.5), 0, z + rng.randf_range(-1.5, 1.5))), 0.7, CRYPT_LIGHT.darkened(0.1), rng, 0.6, 0.0)
+	var deco := []
+	for side in [-1.0, 1.0]:  # 기둥 줄 사이 무너진 고딕 기둥(Meshy)
+		for z in [-9.0, 3.0, 9.0]:
+			deco.append(["broken_pillar", _xz(Vector3(side * 17.5, 0, z)), rng.randf() * TAU, rng.randf_range(3.5, 6.0)])
 	for i in 16:
 		var a := rng.randf() * TAU
 		var r := rng.randf_range(FIGHT_R + 1.5, 19.0 * S)
 		var p := Vector3(cos(a) * r, 0, sin(a) * r)
 		if p.z < -10.0 * S and absf(p.x) < 6.0 * S:
 			continue  # 제단 앞은 비운다
-		_tombstone(k, p, rng)
+		deco.append(["tombstone", p, rng.randf() * TAU, rng.randf_range(1.4, 2.0)])  # Meshy 묘비(2026-11-06)
 	for i in 10:
 		var a := rng.randf() * TAU
 		var r := rng.randf_range(FIGHT_R + 0.5, 18.0 * S)
@@ -140,7 +146,8 @@ static func crypt() -> Dictionary:
 		k.prism_n(alt + Vector3(x, 0, -2.6), 4, 0.8, 0.7, 7.0, CRYPT_STONE, PI / 4.0)
 	k.box(alt + Vector3(0, 7.0, -2.6), Vector3(10.6, 1.2, 1.4), CRYPT_STONE)
 	k.pyramid(alt + Vector3(0, 8.2, -2.6), 2.0, 1.6, CRYPT_DARK)
-	_commit(k, site)
+	_commit(k, site, ArenaKit.painted_material("crypt_floor", 10.0, CRYPT_STONE, 0.8, 0.2))
+	ArenaKit.props(site, deco, false, Color(0.75, 0.8, 0.95))
 	# 영혼불 화로(청록 불꽃 + 점광원)
 	var braziers := [Vector3(-9.5, 0, -11.0), Vector3(9.5, 0, -11.0), Vector3(-12.0, 0, 4.0), Vector3(12.0, 0, 4.0), Vector3(-3.6, 0, -16.0), Vector3(3.6, 0, -16.0)].map(func(v): return _xz(v))
 	var fk = MeshKit.new()
@@ -235,7 +242,7 @@ static func _mist(color: Color, box: Vector3) -> CPUParticles3D:
 static func nest() -> Dictionary:
 	var root := Node3D.new()
 	root.name = "Nest"
-	root.add_child(_ground(NEST_DIRT, NEST_DIRT.darkened(0.07)))
+	root.add_child(_ground(NEST_DIRT, NEST_DIRT.darkened(0.07), "nest_floor"))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 43
 	var site := Node3D.new()
@@ -269,16 +276,25 @@ static func nest() -> Dictionary:
 		_strand(k, top, low, 0.04, WEB)
 	# 뒤: 여왕의 큰 거미줄(바퀴살 + 나선) 두 벽 사이
 	_web_wheel(k, _xz(Vector3(0, 6.0, -18.5)), 6.5)
+	var nest_deco := []
+	for i in 9:  # 둘레 바위벽 앞 거미줄 감긴 죽은 나무(Meshy)
+		var a := TAU * i / 9.0 + rng.randf_range(-0.2, 0.2)
+		if sin(a) > 0.5:
+			continue  # 화면 아래(앞)는 비운다
+		var r := rng.randf_range(FIGHT_R + 2.5, FIGHT_R + 4.0)
+		nest_deco.append(["web_tree", Vector3(cos(a) * r, 0, sin(a) * r), rng.randf() * TAU, rng.randf_range(4.0, 5.5)])
 	# 알 더미·고치·뼈
 	for c in [Vector3(-10.5, 0, -8.0), Vector3(10.5, 0, -6.0), Vector3(-12.0, 0, 6.0), Vector3(11.5, 0, 8.0), Vector3(-5.0, 0, -15.0), Vector3(6.0, 0, -15.5)].map(func(v): return _xz(v)):
 		_egg_cluster(k, c, rng)
+		nest_deco.append(["egg_sacs", c + (c.normalized() * 1.2), rng.randf() * TAU, 1.3])  # Meshy 알 주머니(2026-11-06)
 	for i in 8:
 		var a := rng.randf() * TAU
 		var r := rng.randf_range(FIGHT_R + 0.5, FIGHT_R + 3.5)
 		_cocoon(k, Vector3(cos(a) * r, 0, sin(a) * r), rng)
 	for i in 14:
 		ArenaKit._bone(k, _xz(Vector3(rng.randf_range(-13, 13), 0, rng.randf_range(-13, 13))), rng.randf() * TAU, rng.randf_range(0.4, 0.9))
-	_commit(k, site)
+	_commit(k, site, ArenaKit.painted_material("nest_floor", 10.0, NEST_DIRT, 0.8, 0.2))
+	ArenaKit.props(site, nest_deco)
 	var glow := []  # 독 웅덩이 빛(작은 초록 불꽃)
 	for c in [Vector3(-12.5, 0, -2.0), Vector3(12.8, 0, 0.0), Vector3(-3.0, 0, -16.5), Vector3(3.5, 0, -16.8)].map(func(v): return _xz(v)):
 		glow.append(c + Vector3(0, 0.1, 0))

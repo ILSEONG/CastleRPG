@@ -15,6 +15,8 @@ const GlowShader := preload("res://shaders/glow.gdshader")
 const SmokeShader := preload("res://shaders/smoke.gdshader")
 const LavaShader := preload("res://shaders/lava.gdshader")
 const CheerShader := preload("res://shaders/cheer.gdshader")
+const PaintedShader := preload("res://shaders/painted_vc.gdshader")
+const PropKit := preload("res://scripts/prop_kit.gd")
 
 const DOWN := Vector3(0.70710678, 0, 0.70710678)  # 화면 아래(카메라 쪽)
 const RIGHT := Vector3(0.70710678, 0, -0.70710678)  # 화면 오른쪽
@@ -143,6 +145,52 @@ static func spot(u: float, v: float) -> Vector3:
 	return DOWN * u + RIGHT * v
 
 
+## 손그림 바닥 질감(assets/textures/ground/<name>.png, dev/meshy/ground_textures.py) — 맵 새로 만들기 2026-11-06.
+static func ground_tex(name: String) -> Texture2D:
+	return load("res://assets/textures/ground/%s.png" % name)
+
+
+## Meshy 손그림 소품 놓기(맵 새로 만들기 2026-11-06): items = [[이름, 자리(parent 좌표), 요(rad), 키 m(0 = PropKit 기본)], …].
+## 이름마다 MultiMesh 하나(메시 질감 그대로). tint ≠ 흰색이면 재질 색을 곱한다(수정 광산의 푸른 절벽 등).
+static func props(parent: Node3D, items: Array, shadow := false, tint := Color.WHITE) -> void:
+	var by := {}
+	for it in items:
+		var n: String = it[0]
+		var h: float = it[3] if it.size() > 3 and it[3] > 0.0 else PropKit.HEIGHT.get(n, 2.0)
+		var sc: float = h / PropKit.HEIGHT.get(n, 2.0)
+		if not by.has(n):
+			by[n] = []
+		by[n].append(Transform3D(Basis(Vector3.UP, it[2]).scaled(Vector3.ONE * sc), it[1]))
+	for n in by:
+		var m: Mesh = PropKit.mesh(n)
+		if tint != Color.WHITE:
+			m = PropKit.tinted(n, tint)
+		parent.add_child(_multimesh(m, by[n], null, shadow))
+
+
+## 무대 메시 재질: 로우폴리 정점 색 + 낮게 위를 보는 면(바닥 판석·모래·얼룩)에 손그림 질감(painted_vc.gdshader). ref = 바닥 메시의 대표 정점 색.
+static func painted_material(tex: String, m: float, ref: Color, gain := 0.85, floor_y := 0.35) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = PaintedShader
+	mat.set_shader_parameter("floor_tex", ground_tex(tex))
+	mat.set_shader_parameter("floor_m", m)
+	mat.set_shader_parameter("floor_ref", ref)
+	mat.set_shader_parameter("floor_gain", gain)
+	mat.set_shader_parameter("floor_y", floor_y)
+	return mat
+
+
+## 판 셰이더 재질(ground_grid)을 질감 모드로: 풀밭 grass, 성 안 포장 paved, 길 road(없으면 grass). m = 질감 한 장 미터.
+static func textured_ground(mat: ShaderMaterial, grass: String, m := 14.0, road := "", paved := "", gain := 0.66) -> void:
+	mat.set_shader_parameter("use_tex", true)
+	mat.set_shader_parameter("grass_gain", gain)
+	mat.set_shader_parameter("grass_tex", ground_tex(grass))
+	mat.set_shader_parameter("grass_tex_m", m)
+	mat.set_shader_parameter("grass_ref", mat.get_shader_parameter("grass_a"))
+	mat.set_shader_parameter("road_tex", ground_tex(road if road != "" else grass))
+	mat.set_shader_parameter("paved_tex", ground_tex(paved if paved != "" else grass))
+
+
 ## 맵 퀄리티(2026-11-06): 모든 3D 장면 공통 색 보정 — 채도·대비를 조금 올려 파스텔처럼 뜬 색을 또렷하게(필름 톤매핑은 밝은 맵이 바래 보여 뺐다).
 ## 내 성(main.gd)·던전·PVP·길드 드래곤·길드전·파티 무대가 같이 쓴다.
 static func grade(e: Environment) -> void:
@@ -210,12 +258,12 @@ static func plains() -> Dictionary:
 		mounds.append(_mound(rng))
 	_scatter(root, mounds, 16, PLAINS_FIGHT_R + 14.0, 100.0, rng, 0.8, 1.4)
 	var trees := []
-	for f in [TownKit.tree_pine, TownKit.tree_pine, TownKit.tree_round, TownKit.tree_round, TownKit.bush]:
+	for f in [PropKit.tree_pine, PropKit.tree_pine, PropKit.tree_round, PropKit.tree_round, PropKit.bush]:
 		trees.append(f.call(rng))
 	_scatter(root, trees, 70, PLAINS_FIGHT_R + 4.0, 115.0, rng, 0.85, 1.2, 3)
 	var rocks := []
 	for i in 3:
-		rocks.append(TownKit.rock_cluster(rng))
+		rocks.append(PropKit.rock_cluster(rng))
 	_scatter(root, rocks, 30, PLAINS_FIGHT_R, 110.0, rng, 0.6, 1.3)
 	var peaks := []
 	for i in 5:
@@ -300,7 +348,7 @@ static func _scatter(root: Node3D, variants: Array, count: int, r_min: float, r_
 ## 화면 위(왕 고블린 뒤) 나무 틀 갱도 입구 둘(선로가 들어간다)과 금을 실은 광차, 위 테두리의 나무 권양탑, 벽을 따라 반짝이는 금빛.
 ## 돌·나무·금은 메시 하나(그림자 없음 — 절벽 그림자가 싸움터를 덮지 않게), 등불은 불꽃 MultiMesh 하나, 반짝임 하나.
 ## 유닛은 PLAINS_FIGHT_R 원 안 + 화면 가로 MINE_SIDE 안(crowd.arena_side). 영웅·고블린·왕 자리는 평야와 같다.
-static func gold_mine() -> Dictionary:
+static func gold_mine(crystal := false) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "GoldMine"
 	var plane := PlaneMesh.new()
@@ -313,6 +361,7 @@ static func gold_mine() -> Dictionary:
 	mat.set_shader_parameter("grass_b", DIRT.darkened(0.04))
 	mat.set_shader_parameter("line_color", Color(0, 0, 0, 0.0))
 	mat.set_shader_parameter("facet_variation", 0.08)
+	textured_ground(mat, "mine_dirt", 12.0, "", "", 0.62)
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -334,7 +383,7 @@ static func gold_mine() -> Dictionary:
 	_mine_front(k, rng)
 	var stone := MeshInstance3D.new()
 	stone.mesh = k.commit()
-	stone.material_override = Art.lowpoly_vc_material()
+	stone.material_override = painted_material("mine_dirt", 12.0, DIRT, 0.62)
 	stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	site.add_child(stone)
 	var flames := []
@@ -342,6 +391,7 @@ static func gold_mine() -> Dictionary:
 		flames.append(Transform3D(Basis().scaled(Vector3.ONE * 0.3), p))
 	site.add_child(_multimesh(flame_mesh(), flames, _glow(1.0, 0.0, 0.9), false))
 	site.add_child(_glints())
+	_mine_props(site, rng, crystal)
 	var heroes := []
 	for i in 6:
 		heroes.append(spot(9.0 + (i / 3) * 2.6, (i % 3 - 1) * 2.8))
@@ -361,7 +411,7 @@ static func gold_mine() -> Dictionary:
 ## 강화석 던전 무대(2026-10-29): 골드 광산과 같은 협곡·선로·광차를 수정 광산으로 다시 칠한다 — 금빛(금 결정·더미·금화)은 푸른 수정,
 ## 흙·나무 갈색은 푸른 잿빛 돌, 갱도 등불 빛과 반짝이는 차가운 하늘색. 자리(영웅·적·보스)는 골드 광산과 같다.
 static func crystal_mine() -> Dictionary:
-	var st := gold_mine()
+	var st := gold_mine(true)
 	var root: Node3D = st.root
 	root.name = "CrystalMine"
 	for mi in root.find_children("*", "MeshInstance3D", true, false):
@@ -371,6 +421,9 @@ static func crystal_mine() -> Dictionary:
 			mi.material_override.set_shader_parameter("grass_a", CRYSTAL_FLOOR)
 			mi.material_override.set_shader_parameter("grass_b", CRYSTAL_FLOOR.darkened(0.05))
 			mi.material_override.set_shader_parameter("patch_hue", Vector3(-0.03, 0.0, 0.05))  # 얼룩도 차가운 푸른빛
+			textured_ground(mi.material_override, "crystal_floor", 12.0, "", "", 0.8)
+		if mi.material_override is ShaderMaterial and mi.material_override.shader == PaintedShader:
+			mi.material_override = painted_material("crystal_floor", 12.0, crystal_color(DIRT), 0.8)
 	for p in root.find_children("*", "CPUParticles3D", true, false):
 		p.color = CRYSTAL_GLINT
 	var light: Dictionary = st.light
@@ -427,6 +480,28 @@ static func _mine_floor(k, rng: RandomNumberGenerator) -> void:
 		k.xform = Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), c)
 		k.box(Vector3.ZERO, Vector3(0.32, 0.06, rng.randf_range(1.4, 2.2)), TIMBER.darkened(rng.randf_range(0.0, 0.15)))
 		k.xform = Transform3D.IDENTITY
+
+
+## Meshy 소품(맵 새로 만들기 2026-11-06): 협곡 벽 너머 높은 사암 절벽 기둥(수정 광산은 푸른 잿빛), 벽 밑 금광석(수정 광산은 푸른 수정 덩이),
+## 갱도 입구 앞 광차. 싸움 자리(원 PLAINS_FIGHT_R + 가로 MINE_SIDE) 밖에만 — 금광석 안쪽 끝 |x| ≥ MINE_WALL − 0.2.
+static func _mine_props(site: Node3D, rng: RandomNumberGenerator, crystal: bool) -> void:
+	var cliffs := []
+	var ores := []
+	for sx in [-1.0, 1.0]:
+		var z := -MINE_BACK - 6.0
+		while z < MINE_FRONT:
+			cliffs.append(["cliff", Vector3(sx * rng.randf_range(MINE_WALL + 4.0, MINE_WALL + 7.0), 0, z), rng.randf() * TAU, rng.randf_range(8.0, 12.0)])
+			z += rng.randf_range(4.5, 6.5)
+		z = -MINE_BACK + 2.0
+		while z < MINE_FRONT - 4.0:
+			ores.append(["crystal" if crystal else "gold_ore", Vector3(sx * (MINE_WALL + 0.9), 0, z), rng.randf() * TAU, rng.randf_range(1.3, 2.0)])
+			z += rng.randf_range(6.0, 10.0)
+	for x in [-14.0, -6.5, 6.5, 14.0]:  # 뒤 절벽 위·옆
+		cliffs.append(["cliff", Vector3(x + rng.randf_range(-1.0, 1.0), 0, -MINE_BACK - rng.randf_range(4.0, 7.0)), rng.randf() * TAU, rng.randf_range(10.0, 13.0)])
+	props(site, cliffs, false, Color(0.62, 0.72, 0.88) if crystal else Color.WHITE)
+	props(site, ores)
+	props(site, [["mine_cart", Vector3(MINE_TRACKS[0], 0, -MINE_BACK + 1.0), 0.0, 1.7], ["mine_cart", Vector3(-8.0, 0, -MINE_BACK + 3.5), 0.6, 1.6]],
+		false, Color(0.7, 0.8, 0.95) if crystal else Color.WHITE)
 
 
 ## 광차 선로(x, z0 → z1): 침목(0.8 m 간격) + 쇠 레일 둘. 높이 0.12 m.
@@ -706,6 +781,7 @@ static func temple(grow_z := 0.0, grow_x := 0.0) -> Dictionary:
 	mat.set_shader_parameter("grass_a", Color(0.35, 0.48, 0.29))  # 맵 퀄리티: 조금 짙은 숲 풀색(채도 보정 뒤 형광 연두가 되지 않게)
 	mat.set_shader_parameter("grass_b", Color(0.33, 0.455, 0.275))
 	mat.set_shader_parameter("patch_strength", 0.16)
+	textured_ground(mat, "temple_grass", 12.0, "", "", 0.78)
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -721,20 +797,28 @@ static func temple(grow_z := 0.0, grow_x := 0.0) -> Dictionary:
 	_temple_columns(k, grow_z, grow_x)
 	_temple_shrine(k, grow_z)
 	var fires := []
+	var deco := []  # Meshy 소품(맵 새로 만들기 2026-11-06): 돌등·수호 사자·쓰러진 기둥·바위
 	for z in [-8.0, -1.0, 6.0]:
 		for x in [-5.0, 5.0]:
-			_stone_lantern(k, Vector3(x, 0, z))
-			fires.append(Transform3D(Basis().scaled(Vector3.ONE * 0.55), Vector3(x, LANTERN_H, z)))
+			deco.append(["stone_lantern", Vector3(x, 0, z), PI if x > 0.0 else 0.0, 2.4])
 	for x in [-7.0, 7.0]:
 		fires.append(Transform3D(Basis().scaled(Vector3.ONE * 0.8), Vector3(x, 3.1 + 1.45, -20.5 - grow_z)))
 		_brazier(k, Vector3(x, 3.1, -20.5 - grow_z))
 	var stone := MeshInstance3D.new()
 	stone.mesh = k.commit()
-	stone.material_override = Art.lowpoly_vc_material()
+	stone.material_override = painted_material("temple_stone", 4.0, PATH_STONE, 0.8, 0.12)  # 판석 윗면만(높이 ≤ 0.05)
 	site.add_child(stone)
+	for x in [-7.5, 7.5]:
+		deco.append(["lion_statue", Vector3(x, 0, -13.5 - grow_z), 0.0, 3.6])
+	var hx0 := TEMPLE_HALF + grow_x
+	for i in 10:  # 앞뜰 둘레 밖 쓰러진 기둥·바위
+		var side := -1.0 if i % 2 == 0 else 1.0
+		var p := Vector3(side * rng.randf_range(hx0 + 4.0, hx0 + 12.0), 0, rng.randf_range(-14.0 - grow_z, 18.0 + grow_z))
+		deco.append(["ruin_column" if i % 3 == 0 else ("rock_big" if i % 3 == 1 else "flower_bush"), p, rng.randf() * TAU, 0.0])
+	props(site, deco, true)
 	site.add_child(_multimesh(flame_mesh(), fires, _glow(1.0, 0.0, 0.9), false))
 	var trees := []
-	for f in [TownKit.tree_pine, TownKit.tree_round, TownKit.tree_round, TownKit.bush]:
+	for f in [PropKit.tree_pine, PropKit.tree_round, PropKit.tree_round, PropKit.bush]:
 		trees.append(f.call(rng))
 	_scatter(root, trees, 80, TEMPLE_FIGHT_R + 9.0 + maxf(grow_z, grow_x), 110.0, rng, 0.9, 1.3, 3)
 	var hx := TEMPLE_HALF + grow_x
@@ -822,14 +906,7 @@ static func _temple_shrine(k, gz := 0.0) -> void:
 	k.box(Vector3(0, top + 4.6, -25.0 - gz), Vector3(12.4, 0.6, 6.4), GOLD_TRIM)
 	k.gable(Vector3(0, top + 5.2, -25.0 - gz), Vector3(12.0, 0, 7.0), 3.0, ROOF_RED, 0.6)
 	k.box(Vector3(0, top + 8.1, -25.0 - gz), Vector3(13.0, 0.3, 0.4), GOLD_TRIM)
-	for x in [-7.5, 7.5]:  # 수호 석상: 받침 + 웅크린 몸 + 머리 + 귀
-		var b := Vector3(float(x), 0, -13.5 - gz)
-		k.box(b, Vector3(2.0, 1.0, 2.0), SANDSTONE_DARK)
-		k.prism_n(b + Vector3(0, 1.0, 0), 6, 0.85, 0.6, 1.7, STATUE, PI / 6.0)
-		k.box(b + Vector3(0, 2.6, 0.25), Vector3(1.1, 0.95, 1.1), STATUE)
-		k.box(b + Vector3(0, 2.75, 0.85), Vector3(0.7, 0.45, 0.25), STATUE.darkened(0.12))
-		for ex in [-0.4, 0.4]:
-			k.pyramid(b + Vector3(ex, 3.55, 0.1), 0.35, 0.5, STATUE)
+	pass  # 수호 석상은 Meshy 사자상(temple()의 deco)
 
 
 ## 돌등: 받침·기둥·불 담는 집(4면 기둥 + 지붕) — 불꽃 밑 = LANTERN_H.
@@ -857,6 +934,8 @@ static func castle() -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = CASTLE_SEED
 	var k = MeshKit.new()
+	_hall_deco = []
+	_hall_deco_on = true
 	_hall_floor(k, rng)
 	_hall_walls(k, rng)
 	_hall_columns(k, rng)
@@ -870,9 +949,11 @@ static func castle() -> Dictionary:
 		fires.append(Transform3D(Basis().scaled(Vector3.ONE * f[1]), f[0]))
 	var stone := MeshInstance3D.new()
 	stone.mesh = k.commit()
-	stone.material_override = Art.lowpoly_vc_material()
+	stone.material_override = painted_material("hall_floor", 4.0, STONE, 1.5, 0.3)
 	stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	hall.add_child(stone)
+	_hall_deco_on = false
+	props(hall, _hall_deco)
 	hall.add_child(_multimesh(flame_mesh(), fires, _glow(1.0, 0.0, 0.9), false))
 	var smokes := []
 	for p in SMOKES:
@@ -975,6 +1056,7 @@ static func _hall_columns(k, rng: RandomNumberGenerator) -> void:
 				k.box(base + Vector3(0, top + 0.35, 0), Vector3(1.7, 0.3, 1.7), STONE)
 			else:
 				k.rock(base + Vector3(0, top, 0), 0.62, STONE, rng, 0.9)
+				_hall_deco.append(["broken_pillar", base + Vector3(s * 0.9, 0, 1.2), rng.randf() * TAU, top + 1.5])  # 옆에 무너진 기둥(Meshy)
 	_fallen(k, Vector3(5.5, 0, 15.5), 0.25, 6.0)
 	_fallen(k, Vector3(-13.5, 0, -6.0), 0.5, 6.5)
 	for p in [Vector3(-10.0, 0, 6.5), Vector3(10.5, 0, 1.5), Vector3(-8.0, 0, 13.5)]:
@@ -985,7 +1067,9 @@ static func _hall_columns(k, rng: RandomNumberGenerator) -> void:
 		if absf(p.x) < 7.0 and p.z > -11.5 and p.z < 13.0:
 			continue
 		n += 1
-		if rng.randf() < 0.7:
+		if n % 4 == 0:  # 잔해 더미(Meshy)
+			_hall_deco.append(["rubble", p, rng.randf() * TAU, rng.randf_range(1.2, 1.8)])
+		elif rng.randf() < 0.7:
 			k.rock(p + Vector3(0, 0.1, 0), rng.randf_range(0.25, 0.8), STONE.darkened(rng.randf_range(0.0, 0.2)), rng, 0.6, 0.0)
 		else:
 			k.xform = Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)) * Basis(Vector3.RIGHT, rng.randf_range(-0.3, 0.3)), p)
@@ -1002,7 +1086,14 @@ static func _fallen(k, start: Vector3, yaw: float, length: float) -> void:
 
 
 ## 화로: 6각 받침 + 기둥 + 위가 넓은 8각 쇠 그릇 + 빛나는 숯(불꽃 밑 = BRAZIER_H).
+static var _hall_deco := []
+static var _hall_deco_on := false  # castle() 동안 모으는 Meshy 소품(맵 새로 만들기 2026-11-06)
+
+
 static func _brazier(k, p: Vector3) -> void:
+	if p.y == 0.0 and _hall_deco_on:  # 장비 던전 홀 화로: Meshy 쇠 화로(숯 위 = BRAZIER_H)
+		_hall_deco.append(["brazier", p, 0.0, BRAZIER_H + 0.15])
+		return
 	k.prism_n(p, 6, 0.42, 0.36, 0.14, IRON)
 	k.prism_n(p + Vector3(0, 0.14, 0), 6, 0.11, 0.11, 0.9, IRON)
 	k.prism_n(p + Vector3(0, 1.0, 0), 8, 0.24, 0.62, 0.42, IRON, PI / 8.0)
@@ -1107,7 +1198,7 @@ static func _multimesh(mesh: Mesh, xforms: Array, mat: Material, shadow: bool) -
 		mm.set_instance_transform(i, xforms[i])
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
-	mmi.material_override = mat
+	mmi.material_override = null if mesh.has_meta("prop") else mat  # Meshy 소품(PropKit)은 메시 질감 그대로
 	if not shadow:
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mmi
@@ -1156,6 +1247,7 @@ static func lair() -> Dictionary:
 	mat.set_shader_parameter("grass_b", BASALT.darkened(0.04))
 	mat.set_shader_parameter("line_color", Color(0, 0, 0, 0.0))
 	mat.set_shader_parameter("facet_variation", 0.10)
+	textured_ground(mat, "basalt", 14.0, "", "", 0.6)
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -1175,14 +1267,21 @@ static func lair() -> Dictionary:
 		_lair_cliffs(k, s, rng)
 	_lair_back(k, lava, fall, rng)
 	_hoard(k, Vector3(0, 0, LAIR_HOARD_U), rng)
+	var spires := [["treasure", Vector3(0.5, 0, LAIR_HOARD_U - 0.5), 0.3, 3.2], ["treasure", Vector3(-4.5, 0, LAIR_HOARD_U + 1.0), 2.4, 2.2]]  # Meshy 소품(2026-11-06)
+	for sx in [-1.0, 1.0]:  # 용암 강 너머 흑요석 첨탑
+		var z := -LAIR_BACK
+		while z < LAIR_FRONT:
+			spires.append(["obsidian", Vector3(sx * rng.randf_range(CLIFF_IN + 1.0, CLIFF_IN + 6.0), 0, z), rng.randf() * TAU, rng.randf_range(6.0, 11.0)])
+			z += rng.randf_range(5.0, 8.0)
 	_ribcage(k, Vector3(-4.0, 0, 18.5), rng)
 	_horned_skull(k, Vector3(4.6, 0, 16.5), rng)
 	_lava_pool(k, lava, Vector3(1.0, 0, 21.2), 1.9, rng)
 	var stone := MeshInstance3D.new()
 	stone.mesh = k.commit()
-	stone.material_override = Art.lowpoly_vc_material()
+	stone.material_override = painted_material("basalt", 14.0, BASALT, 0.6, 0.2)
 	stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	site.add_child(stone)
+	props(site, spires)
 	for pair in [[lava, false], [fall, true]]:
 		var mi := MeshInstance3D.new()
 		mi.mesh = pair[0].commit()
@@ -1522,6 +1621,7 @@ static func colosseum() -> Dictionary:
 	mat.set_shader_parameter("interior_half", 0.0)
 	mat.set_shader_parameter("grass_a", GRASS)
 	mat.set_shader_parameter("grass_b", GRASS.darkened(0.05))
+	textured_ground(mat, "meadow", 14.0)
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -1547,7 +1647,7 @@ static func colosseum() -> Dictionary:
 		_camp(k, fires, trees, e, rng)
 	var flat := MeshInstance3D.new()
 	flat.mesh = deco.commit()
-	flat.material_override = Art.lowpoly_vc_material()
+	flat.material_override = painted_material("sand", 10.0, SAND, 0.68)
 	flat.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	site.add_child(flat)
 	var walls := MeshInstance3D.new()
@@ -1561,7 +1661,7 @@ static func colosseum() -> Dictionary:
 	crowd.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	site.add_child(crowd)
 	site.add_child(_multimesh(flame_mesh(), fires, _glow(1.0, 0.0, 0.9), false))
-	var shapes := [TownKit.tree_pine(rng), TownKit.tree_round(rng)]
+	var shapes := [PropKit.tree_pine(rng), PropKit.tree_round(rng)]
 	for i in 2:
 		site.add_child(_multimesh(shapes[i], trees[i], Art.lowpoly_vc_material(), true))
 	var heroes := []

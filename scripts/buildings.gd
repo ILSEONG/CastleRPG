@@ -17,6 +17,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Graphics := preload("res://scripts/graphics.gd")
+const PropKit := preload("res://scripts/prop_kit.gd")
 
 const LAYER_TAP := 16  # 건물 탭 판정체 (성문 2, 성벽 8과 별도)
 const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — picker가 건물보다 먼저 본다(앞쪽 건물 상자에 가리지 않게)
@@ -210,7 +211,9 @@ func _scatter_nature() -> void:
 	rng.seed = Art.NATURE_SEED
 	var variants: Array[Mesh] = []
 	var info := []  # 변형마다 [레시피, 레시피 안 번호, 만들기 전 rng 상태]
-	for pair in [[TownKit.tree_pine, 4], [TownKit.tree_round, 3], [TownKit.bush, 2], [TownKit.rock_cluster, 3]]:  # 레시피, 변형 수
+	var low := Graphics.quality() == "low"  # 그래픽 낮음: 예전 로우폴리 나무(삼각형이 훨씬 적다)
+	var kit = TownKit if low else PropKit
+	for pair in [[kit.tree_pine, 4], [kit.tree_round, 3], [kit.bush, 2], [kit.rock_cluster, 3]]:  # 레시피, 변형 수(Meshy 손그림 소품 2026-11-06)
 		for i in pair[1]:
 			info.append([pair[0], i, rng.state])
 			variants.append(pair[0].call(rng))
@@ -241,8 +244,15 @@ func _scatter_nature() -> void:
 			var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * rng.randf_range(0.85, 1.15))
 			if _nature_spot_ok(q, keep_out):
 				by_variant[v].append(Transform3D(basis, Vector3(q.x, 0, q.y)))
-	for v in by_variant:
-		_add_season_slot(_add_multimesh(variants[v], by_variant[v]), info[v])
+	for v in by_variant:  # 3×3 칸으로 나눈 MultiMesh — 화면 밖 칸은 통째로 안 그린다(Meshy 나무는 삼각형이 많다)
+		var cells := {}
+		for xf in by_variant[v]:
+			var key := Vector2i(clampi(int((xf.origin.x + lim) / (2.0 * lim / 3.0)), 0, 2), clampi(int((xf.origin.z + lim) / (2.0 * lim / 3.0)), 0, 2))
+			if not cells.has(key):
+				cells[key] = []
+			cells[key].append(xf)
+		for key in cells:
+			_add_season_slot(_add_multimesh(variants[v], cells[key]), info[v])
 
 
 ## 맵 퀄리티(2026-11-06): 성 밖 풀밭에 풀포기·들꽃·자갈을 무리 지어 흩는다(RoK·Lords Mobile 성 밖 풀밭처럼 맨 격자 대신 결이 보이게).
@@ -337,7 +347,7 @@ func _add_multimesh(mesh: Mesh, placements: Array) -> MultiMesh:
 		mm.set_instance_transform(i, placements[i])
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
-	mmi.material_override = Art.lowpoly_vc_material()
+	mmi.material_override = null if mesh.has_meta("prop") else Art.lowpoly_vc_material()  # Meshy 소품은 메시 질감 그대로
 	add_child(mmi)
 	return mm
 

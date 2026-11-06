@@ -42,6 +42,8 @@ def decimate(P, uv, idx, tris, head_tris=0, head=(0.18, 0.28)):
     ms.meshing_remove_unreferenced_vertices()
     args = dict(qualitythr=0.5, extratcoordw=4.0, preserveboundary=True, boundaryweight=2.0, optimalplacement=True,
                 preservenormal=True, planarquadric=True)  # extratcoordw 4: UV를 덜 일그러뜨린다(1이면 눈가에 머리색 줄)
+    if "--loose" in sys.argv:  # 잎 덩이처럼 떨어진 조각이 많은 소품(맵 소품 2026-11-06): 가장자리도 줄인다
+        args.update(preserveboundary=False, extratcoordw=1.0, qualitythr=0.3)
     if head_tris:  # 얼굴은 면을 더 남긴다(같은 비율로 줄이면 눈썹·코·수염 윤곽이 먼저 사라진다)
         hx, hy = head
         cond = " && ".join("(abs(x%d) < %f) && (y%d > %f)" % (k, hx, k, hy) for k in range(3))

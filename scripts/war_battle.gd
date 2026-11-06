@@ -17,6 +17,7 @@ const Lang := preload("res://scripts/lang.gd")
 
 const GameData := preload("res://scripts/game_data.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
+const PropKit := preload("res://scripts/prop_kit.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
@@ -166,6 +167,7 @@ func _build_stage() -> void:
 	mat.set_shader_parameter("grass_b", Color(0.44, 0.55, 0.33))
 	mat.set_shader_parameter("outer_road_half", Balance.TILE * 1.6)  # 맵 퀄리티(2026-11-06): 성문 밖 흙길
 	mat.set_shader_parameter("center_lane", 0.0)
+	ArenaKit.textured_ground(mat, "meadow", 14.0, "dirt_road", "cobble")  # 내 성과 같은 손그림 질감
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -175,12 +177,12 @@ func _build_stage() -> void:
 	rng.seed = 2610
 	var clear := half + Balance.WALL_T + WarRules.CAMP_D + 12.0
 	var trees := []
-	for f in [TownKit.tree_pine, TownKit.tree_pine, TownKit.tree_round, TownKit.bush]:
+	for f in [PropKit.tree_pine, PropKit.tree_pine, PropKit.tree_round, PropKit.bush]:
 		trees.append(f.call(rng))
 	ArenaKit._scatter(root, trees, 80, clear, 120.0, rng, 0.85, 1.25, 3)
 	var rocks := []
 	for i in 3:
-		rocks.append(TownKit.rock_cluster(rng))
+		rocks.append(PropKit.rock_cluster(rng))
 	ArenaKit._scatter(root, rocks, 24, clear - 4.0, 110.0, rng, 0.6, 1.3)
 	var peaks := []
 	for i in 4:

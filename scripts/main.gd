@@ -791,6 +791,8 @@ func _build_ground(interior_half: float) -> void:
 	mat.set_shader_parameter("lane_depth", interior_half - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN)
 	mat.set_shader_parameter("outer_road_half", Balance.TILE * 1.6)  # 성 밖 흙길(맵 퀄리티 2026-11-06)
 	mat.set_shader_parameter("center_lane", 1.0 if offs.size() % 2 == 1 else 0.0)
+	ArenaKit.textured_ground(mat, "meadow", 14.0, "dirt_road", "cobble")  # 손그림 질감(맵 새로 만들기 2026-11-06)
+	mat.set_shader_parameter("grass_ref", Color(0.441, 0.511, 0.372))  # 여름 풀색 = 질감 그대로, 다른 계절은 그 차이만큼 물든다
 	_ground_mat = mat
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane
