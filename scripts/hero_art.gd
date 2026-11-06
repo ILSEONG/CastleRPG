@@ -98,7 +98,7 @@ static func region(tex: Vector2, win: Vector2, face: Vector2, face_at := FACE_AT
 
 
 ## 다각형 poly(창 r 안)를 그림으로 채운다 — UV는 region을 창 r에 맞춘 좌표라 모서리 깎인 모양대로 잘린다.
-static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rect2, face_at := FACE_AT, zoom := 1.0) -> bool:
+static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rect2, face_at := FACE_AT, zoom := 1.0, alpha := 1.0) -> bool:
 	var tex := texture(id)
 	if tex == null or r.size.x <= 0.0 or r.size.y <= 0.0:
 		return false
@@ -108,5 +108,5 @@ static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rec
 	for p in poly:
 		var k := (p - r.position) / r.size
 		uvs.append((reg.position + k * reg.size) / ts)
-	ci.draw_colored_polygon(poly, Color.WHITE, uvs, tex)
+	ci.draw_colored_polygon(poly, Color(1, 1, 1, alpha), uvs, tex)
 	return true
