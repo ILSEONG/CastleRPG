@@ -44,10 +44,10 @@ func _ready() -> void:
 	_check(await _loaded(), "attendance table loads", "")
 	_check(_panel.cells.size() == 28 and _panel.can_claim(), "28 cells, day 1 claimable", str(_panel.data.get("n")))
 	await _snap()  # 2. 첫날
-	var gold := Economy.gold
+	var gold := Economy.pouch_count("gold_30")
 	_panel.claim_button.pressed.emit()
 	_check(await _wait_until(func(): return not _panel.claiming, 10.0), "claim answered", "")
-	_check(_panel.claimed_n() == 1 and not _panel.can_claim() and Economy.gold > gold, "day 1 claimed, gold went up", "%d -> %d" % [gold, Economy.gold])
+	_check(_panel.claimed_n() == 1 and not _panel.can_claim() and Economy.pouch_count("gold_30") == gold + 2, "day 1 claimed, two 30-min gold pouches", "%d -> %d" % [gold, Economy.pouch_count("gold_30")])
 	_check(not _menu.has_dot(), "red dot gone after claiming", "")
 	await _frames(10)
 	await _snap()  # 3. 받은 뒤
