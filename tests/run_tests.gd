@@ -3886,8 +3886,8 @@ func test_dungeon_tables() -> void:
 	check(GameData.apply_reset("gold", d, DG_MID) == {"best_level": 4, "keys": 3, "extra_today": 0, "last_reset": DG_MID}
 		and GameData.apply_reset("gold", d, DG_MID + 2 * 86400.0 + 5.0).keys == 9 and GameData.apply_reset("gold", d, DG_MID + 3 * 86400.0).keys == 10
 		and GameData.apply_reset("gold", {"best_level": 0, "keys": 12, "extra_today": 0, "last_reset": DG_LAST}, DG_MID + 9 * 86400.0).keys == 12
-		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 3 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
-		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 3), extra runs back to 0, a clock set back changes nothing")
+		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 10 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
+		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 10), extra runs back to 0, a clock set back changes nothing")
 	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(1) == 100000
 		and GameData.extra_cost(10) == 278000 and GameData.extra_cost(50) == 25804000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
 		"fresh dungeon = today's keys; extra run cost fixed per level: 100000 x 1.12^(n-1) ceiled to the thousand; party 6 / 4")
@@ -3941,7 +3941,7 @@ func test_ticket_dungeon_offline() -> void:
 		and not st2.helpers.any(func(h): return h.hero_id == helper) and e.dungeon_block("ticket", 2, party, helper) == "helper_used",
 		"win: key -1, +5 tickets, that helper is used for today: %s" % [st2])
 	e.clock_offset = 86400.0
-	check(e.dungeon_state("ticket").keys == 3 and e.dungeon_state("ticket").helpers_used == [], "next day: keys back to 3 (cap) and every helper again")
+	check(e.dungeon_state("ticket").keys == 5 and e.dungeon_state("ticket").helpers_used == [], "next day: keys 2 + 3 = 5 (cap 10) and every helper again")
 	e.clock_offset = 0.0
 	# 전투 장면(도우미 영웅·골렘 조각)은 tests/ticket_check.tscn(오토로드가 필요하다)
 
