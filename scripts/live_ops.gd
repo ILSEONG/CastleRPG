@@ -44,6 +44,7 @@ var claiming := {}  # 받는 중 key → [우편들](거절되면 되돌린다)
 var redeeming := false
 var inquiries: Array = []  # 내 문의 [{id, category, body, status, answer, at, answered_at}] — 보내는 중인 것은 id < 0, pending
 var inquiries_loaded := false
+var ad_ssv := false  # 서버가 광고 보상을 AdMob 확인(SSV)된 광고로만 준다(실제 광고가 없는 토스·PC 앱은 광고 상품을 못 받는다)
 
 var _poll := MAIL_POLL_SEC
 var _seq := 0
@@ -69,6 +70,7 @@ func _process(delta: float) -> void:
 
 
 func _on_booted(d: Dictionary) -> void:
+	ad_ssv = bool(d.get("ad_ssv", false))
 	if d.get("notices") is Dictionary:
 		_on_notices(d.notices)
 	if d.get("mail") is Dictionary:

@@ -9,6 +9,9 @@ import type { IncomingMessage, Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
+import { Limiter } from './ratelimit.ts'
+
+const UPGRADES_PER_MIN = 20 // 한 계정이 1분에 열 수 있는 새 연결(다시 연결 포함 — 정상 앱은 몇 번)
 
 export const LIVE_PATH = '/v1/guild/war/live'
 // 메시지 크기 상한(2026-10-27 보안 점검: 256 KB → 64 KB): 방장이 3초마다 보내는 전체 snap = 영웅(공격·수비 합쳐 많아야 160) 행 × 숫자 7개 — 10 KB 안팎
@@ -30,6 +33,8 @@ export class WarLive {
   canJoin: (battleId: string, pid: string) => Promise<boolean> = async () => false
   onState: (battleId: string, pid: string, state: unknown, final: boolean) => Promise<boolean> = async () => false // true = 전투가 닫혔다
   private wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MSG })
+  private ipUpgrades = new Limiter(UPGRADES_PER_MIN * 4, 60)
+  private pidUpgrades = new Limiter(UPGRADES_PER_MIN, 60)
   private seq = 0
   private beat = setInterval(() => this.sweep(), HEARTBEAT_MS).unref()
 
@@ -47,7 +52,12 @@ export class WarLive {
 
   private async accept(req: IncomingMessage, sock: Duplex, head: Buffer, url: URL) {
     const battle = url.searchParams.get('battle') ?? ''
+    // 연결 도배 막기(2026-11-06 보안 점검): IP·계정마다 1분에 UPGRADES_PER_MIN번까지 새 연결
+    const ip = String(req.headers['cf-connecting-ip'] ?? req.headers['true-client-ip'] ?? '')
+    const now = Date.now() / 1000
+    if (ip && !this.ipUpgrades.take(ip, now)) return refuse(sock, 429)
     const pid = await this.verify(url.searchParams.get('token') ?? '')
+    if (pid && !this.pidUpgrades.take(pid, now)) return refuse(sock, 429)
     if (!pid || !(await this.canJoin(battle, pid))) {
       sock.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
       sock.destroy()
@@ -66,6 +76,8 @@ export class WarLive {
       this.drop(battle, old)
       old.ws.close(4000, 'replaced')
     }
+    // 예전 연결이 방의 마지막이었으면 drop이 방을 지웠다 — 새 연결이 지워진 방에 들어가 영영 안 닫히지 않게 다시 넣는다(2026-11-06 보안 점검)
+    if (this.rooms.get(battle) !== room) this.rooms.set(battle, room)
     const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0, alive: true }
     room.clients.push(me)
     if (!room.host) room.host = me
@@ -197,4 +209,10 @@ function sendRaw(ws: WebSocket, s: string) {
   if (ws.readyState !== 1) return
   if (ws.bufferedAmount > MAX_BUFFER) ws.terminate()
   else ws.send(s)
+}
+
+// 업그레이드 거절(소켓을 닫는다)
+function refuse(sock: Duplex, status: number) {
+  sock.write(`HTTP/1.1 ${status} ${status === 429 ? 'Too Many Requests' : 'Forbidden'}\r\nConnection: close\r\n\r\n`)
+  sock.destroy()
 }

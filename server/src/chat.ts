@@ -23,8 +23,10 @@ export const REPORTS_PAGE = 100
 export { mask } from './profanity.ts'
 
 // 줄바꿈·제어 문자는 공백 하나로, 앞뒤 공백은 지운다. 너무 길면 MAX_LEN 글자에서 자른다.
+// NFKC로 전각·동그라미 글자(ｆｕｃｋ·ⓕⓤⓒⓚ)를 보통 글자로 바꿔 욕설 거르기를 피하지 못하게 하고, 보이지 않는 채움 글자(ㅤ U+3164·
+// 점자 빈칸 U+2800 등)는 공백으로 — 빈 메시지·줄 밀기를 막는다(2026-11-06 보안 점검).
 export function clean(text: string): string {
-  const t = text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, ' ').replace(/\s+/g, ' ').trim()
+  const t = text.normalize('NFKC').replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u115F\u1160\u3164\uFFA0\u2800]+/gu, ' ').replace(/\s+/g, ' ').trim()
   return [...t].slice(0, MAX_LEN).join('')
 }
 

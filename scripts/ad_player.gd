@@ -74,6 +74,9 @@ func play(done: Callable) -> void:
 	if instant:
 		done.call("")
 		return
+	if _ads == null and LiveOps.ad_ssv and Net.is_online():
+		Economy.notice.emit(Lang.t("ad_player.play"))  # 실제 광고가 없는 앱(토스·PC) — 서버가 확인된 광고만 받는다
+		return
 	_done = done
 	if _ads != null:
 		_play_real()

@@ -173,6 +173,19 @@ func _build_status() -> void:
 	w.add_child(s)
 	buttons["save_version"] = s
 
+	# 광고 보상 서버 확인(AdMob SSV): 켜면 AdMob이 서버에 확인해 준 광고만 보상(앱을 고쳐 광고 없이 받기를 막는다).
+	# AdMob 콘솔 보상형 광고 단위에 서버 측 확인 URL을 넣은 뒤에 켠다. 켜면 실제 광고가 없는 앱(토스 미니앱·PC)은 광고 상품을 못 받는다.
+	var ssv := bool(st.get("ad_ssv", false))
+	var a := _card()
+	a.add_child(_label("광고 보상 서버 확인: " + ("켜짐" if ssv else "꺼짐 — 앱이 보낸 '광고 봤음'을 그대로 믿습니다"), 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	a.add_child(_wrap("AdMob 보상형 광고 단위의 서버 측 확인 URL(https://castlerpg-api.onrender.com/admob/ssv)을 넣은 뒤에 켜세요. 켜면 토스 미니앱·PC는 광고 상품을 받지 못합니다.", 22, SUB))
+	var ab := _button("서버 확인 끄기" if ssv else "서버 확인 켜기", UiKit.STEEL if ssv else HudScript.ACCENT, 24)
+	ab.pressed.connect(func():
+		if ssv or _confirm("ad_ssv_on", ab, "한 번 더 누르면 켭니다"):
+			_save_status({"ad_ssv": not ssv}))
+	a.add_child(ab)
+	buttons["ad_ssv"] = ab
+
 
 func _maint_body(on: bool) -> Dictionary:
 	var d := {"maintenance": on, "maintenance_text": f.mt_text.text.strip_edges()}

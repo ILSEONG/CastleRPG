@@ -8,6 +8,9 @@ import type { IncomingMessage, Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
+import { Limiter } from './ratelimit.ts'
+
+const UPGRADES_PER_MIN = 20 // 한 계정이 1분에 열 수 있는 새 연결(다시 연결 포함 — 정상 앱은 몇 번)
 
 export const PARTY_LIVE_PATH = '/v1/party/live'
 // 메시지 크기 상한(2026-10-27 보안 점검: 128 KB → 32 KB): 방장 snap = 영웅·병사(≤ 12)와 졸개(새끼 거미 상한 45 + 알·해골) 행 × 숫자 6~7개 — 많아야 10 KB 안팎
@@ -26,6 +29,13 @@ export class PartyLive {
   seatOf: (matchId: string, pid: string) => number = () => -1 // 그 매치에서 이 사람의 자리 번호(-1 = 못 들어온다)
   onEnd: (matchId: string, pid: string, win: boolean, elapsed: number) => void = () => {}
   private wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MSG })
+  // 매치마다 실시간 방에 실제로 들어온 사람(사람 수 판단용 — run 행만 만든 부계정을 사람으로 세지 않는다, 2026-11-06 보안 점검)
+  private joined = new Map<string, { at: number; pids: Set<string> }>()
+  humansIn(match: string): number {
+    return this.joined.get(match)?.pids.size ?? 0
+  }
+  private ipUpgrades = new Limiter(UPGRADES_PER_MIN * 4, 60)
+  private pidUpgrades = new Limiter(UPGRADES_PER_MIN, 60)
   private seq = 0
   private beat = setInterval(() => this.sweep(), HEARTBEAT_MS).unref()
 
@@ -42,7 +52,12 @@ export class PartyLive {
 
   private async accept(req: IncomingMessage, sock: Duplex, head: Buffer, url: URL) {
     const match = url.searchParams.get('match') ?? ''
+    // 연결 도배 막기(2026-11-06 보안 점검): IP·계정마다 1분에 UPGRADES_PER_MIN번까지 새 연결
+    const ip = String(req.headers['cf-connecting-ip'] ?? req.headers['true-client-ip'] ?? '')
+    const now = Date.now() / 1000
+    if (ip && !this.ipUpgrades.take(ip, now)) return refuse(sock, 429)
     const pid = await this.verify(url.searchParams.get('token') ?? '')
+    if (pid && !this.pidUpgrades.take(pid, now)) return refuse(sock, 429)
     if (!pid || this.seatOf(match, pid) < 0) {
       sock.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
       sock.destroy()
@@ -61,6 +76,14 @@ export class PartyLive {
       this.drop(match, old)
       old.ws.close(4000, 'replaced')
     }
+    // 예전 연결이 방의 마지막이었으면 drop이 방을 지웠다 — 새 연결이 지워진 방에 들어가 영영 안 닫히지 않게 다시 넣는다(2026-11-06 보안 점검)
+    if (this.rooms.get(match) !== room) this.rooms.set(match, room)
+    const t = Date.now() / 1000
+    if (!this.joined.has(match)) {
+      for (const [k, v] of this.joined) if (t - v.at > 7200) this.joined.delete(k)
+      this.joined.set(match, { at: t, pids: new Set() })
+    }
+    this.joined.get(match)!.pids.add(pid)
     const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0, alive: true }
     room.clients.push(me)
     if (!room.host) room.host = me
@@ -162,4 +185,10 @@ function sendRaw(ws: WebSocket, s: string) {
   if (ws.readyState !== 1) return
   if (ws.bufferedAmount > MAX_BUFFER) ws.terminate()
   else ws.send(s)
+}
+
+// 업그레이드 거절(소켓을 닫는다)
+function refuse(sock: Duplex, status: number) {
+  sock.write(`HTTP/1.1 ${status} ${status === 429 ? 'Too Many Requests' : 'Forbidden'}\r\nConnection: close\r\n\r\n`)
+  sock.destroy()
 }

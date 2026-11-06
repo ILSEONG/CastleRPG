@@ -146,6 +146,7 @@ test('googleVerifier: 서비스 계정 JWT로 토큰을 받고 구매를 조회,
     t2: { purchaseState: 2, orderId: 'GPA.2' },
     t3: { purchaseState: 1, orderId: 'GPA.3' },
     t4: { purchaseState: 0, orderId: 'GPA.4', obfuscatedExternalAccountId: 'someone' },
+    t5: { purchaseState: 0, orderId: 'GPA.5' }, // 계정 표시 없이 산 영수증(2026-11-06 보안 점검: 다른 계정에서 받지 못한다)
   }
   const fetchFn = (async (u: any, init: any = {}) => {
     const url = String(u)
@@ -168,6 +169,7 @@ test('googleVerifier: 서비스 계정 JWT로 토큰을 받고 구매를 조회,
   assert.equal((await v.verify({ product: 'dia_1', token: 't2', account: 'acc' })).pending, true)
   assert.equal((await v.verify({ product: 'dia_1', token: 't3', account: 'acc' })).ok, false)
   assert.equal((await v.verify({ product: 'dia_1', token: 't4', account: 'acc' })).ok, false)
+  assert.equal((await v.verify({ product: 'dia_1', token: 't5', account: 'acc' })).ok, false)
   assert.equal((await v.verify({ product: 'dia_1', token: 'zz', account: 'acc' })).ok, false)
   await v.finish!({ product: 'dia_1', token: 't1' })
   assert.equal(calls.filter((c) => c.url.includes('oauth2')).length, 1, 'access token is cached')

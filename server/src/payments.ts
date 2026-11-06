@@ -93,7 +93,8 @@ export function googleVerifier(cfg: { email: string; privateKey: string; pkg: st
       const orderId = String(j.orderId ?? '') || `token-${createHash('sha256').update(token).digest('hex').slice(0, 32)}`
       if (j.purchaseState === 2) return { ok: false, pending: true, orderId, product, reason: 'pending' }
       if (j.purchaseState !== 0) return { ok: false, orderId, product, reason: `purchaseState ${j.purchaseState}` }
-      if (j.obfuscatedExternalAccountId && j.obfuscatedExternalAccountId !== account) return { ok: false, orderId, product, reason: 'other account' }
+      // 내 계정 표시가 없거나 다르면 받지 않는다(2026-11-06 보안 점검 — 표시 없이 산 영수증을 다른 계정에서 받아 되팔지 못하게. 받지 않은 결제는 Google이 3일 뒤 환불)
+      if (j.obfuscatedExternalAccountId !== account) return { ok: false, orderId, product, reason: 'other account' }
       return { ok: true, orderId, product }
     },
     async finish({ product, token }) {

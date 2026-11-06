@@ -121,6 +121,9 @@ export function nickname(seed: number): string {
 }
 
 // 플레이어 id(uuid) → 길드원 이름(같은 id면 늘 같다).
+// 자동 별명 모양(앞말 + 뒷말 + 숫자)인가 — rules.looksDefaultName과 같은 용도(길드 쪽 별명 목록)
+export const looksDefaultName = (name: string) => NICK_A.some((a) => name.startsWith(a) && NICK_B.some((b) => name.slice(a.length).startsWith(b) && /^\d{0,2}$/.test(name.slice(a.length + b.length))))
+
 export function playerName(id: string): string {
   const own = N.customName(id) // 고른 닉네임이 있으면 그것(names.ts)
   if (own) return own

@@ -915,6 +915,9 @@ function mixName(...xs: number[]): number {
   return h >>> 0
 }
 
+// 자동 별명 모양(앞말 + 뒷말 + 숫자 0~2자리)인가 — 닉네임으로 남의 자동 별명을 흉내 내지 못하게(2026-11-06 보안 점검)
+export const looksDefaultName = (name: string) => NICK_A.some((a) => name.startsWith(a) && NICK_B.some((b) => name.slice(a.length).startsWith(b) && /^\d{0,2}$/.test(name.slice(a.length + b.length))))
+
 export function friendName(id: string): string {
   const own = N.customName(id) // 고른 닉네임이 있으면 그것(names.ts)
   if (own) return own

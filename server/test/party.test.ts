@@ -370,13 +370,13 @@ test('party finish: alone with AI lords the win check is tighter (power slack SO
   const ok = await winRun(S, a.token, await openRun(S, a.id, { dps: 1000, ago: 105 }), 100)
   assert.equal(ok.json.result.win, true)
   assert.equal(ok.json.result.rewards.items.length, 1)
-  // 사람 둘이 함께한 판: 예전 여유 그대로
+  // run 행만 있는 두 번째 사람(부계정이 GET 한 번으로 run만 만든 경우)은 사람으로 세지 않는다 — 실시간 방에 들어온 사람만(2026-11-06 보안 점검)
   const b = await S.login()
   const c = await S.login()
   const match = randomUUID()
   const rb = await openRun(S, b.id, { match, dps: 100, ago: 60 })
   await openRun(S, c.id, { match, dps: 100, ago: 60 })
-  assert.equal((await winRun(S, b.token, rb, e)).json.result.win, true)
+  assert.equal((await winRun(S, b.token, rb, e)).json.result.win, false)
 })
 
 // 가짜 소켓(방이 쓰는 ws.WebSocket 부분만). close·terminate의 'close'는 진짜처럼 다음 틱에 온다

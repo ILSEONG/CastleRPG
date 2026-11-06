@@ -44,6 +44,7 @@ import * as RL from './ratelimit.ts'
 import { DEFAULT_LANG, LANGS, loadBundledTexts, setTexts, textMaps, txt, type TextRow } from './texts.ts'
 
 export interface AppOptions {
+  tokenTtlSec?: number // 접속 토큰 유효 시간(초). 없으면 30일(테스트) — 운영은 TOKEN_TTL_PROD
   query: Query
   now?: () => number // 유닉스 초(float)
   jwtSecret: string
@@ -64,7 +65,8 @@ export interface AppOptions {
   rateLimits?: boolean // 요청 수 상한(계정마다 인증 요청, IP마다 로그인 없는 DB 요청). 기본 켬 — 테스트 헬퍼는 끄고 상한 테스트만 켠다
 }
 
-const TOKEN_TTL = 30 * 86400
+const TOKEN_TTL = 30 * 86400 // 기본(테스트). 운영은 main.ts가 TOKEN_TTL_PROD(하루)를 넘긴다
+export const TOKEN_TTL_PROD = 86400 // 2026-11-06 보안 점검: 30일 토큰은 새면 끊을 수 없었다 — 앱은 401이면 저장한 세션·기기·토스 값으로 다시 로그인한다
 const MAX_ATTEMPTS = 4 // 첫 시도 + 충돌 시 재시도 3회
 const MAX_BODY = 16 * 1024
 const MAX_STAGE = 1_000_000
@@ -544,13 +546,14 @@ export function createApp(opts: AppOptions) {
     const kv = Object.fromEntries(rows.map((r) => [String(r.key), String(r.value)]))
     const until = Number(kv.maintenance_until)
     const v: LO.OpsStatus = { maintenance: kv.maintenance === '1', maintenance_text: kv.maintenance_text ?? '',
-      maintenance_until: kv.maintenance_until && Number.isFinite(until) ? until : null, min_version: kv.min_version ?? '', store_url: kv.store_url ?? '' }
+      maintenance_until: kv.maintenance_until && Number.isFinite(until) ? until : null, min_version: kv.min_version ?? '', store_url: kv.store_url ?? '',
+      ad_ssv: kv.ad_ssv === '1' }
     opsMemo = { at: Date.now(), v }
     return v
   }
   async function setOpsStatus(v: LO.OpsStatus) {
     const kv: Record<string, string> = { maintenance: v.maintenance ? '1' : '0', maintenance_text: v.maintenance_text,
-      maintenance_until: v.maintenance_until === null ? '' : String(v.maintenance_until), min_version: v.min_version, store_url: v.store_url }
+      maintenance_until: v.maintenance_until === null ? '' : String(v.maintenance_until), min_version: v.min_version, store_url: v.store_url, ad_ssv: v.ad_ssv ? '1' : '0' }
     await query(`insert into ops_config (key, value) select x.key, x.value from jsonb_each_text($1::jsonb) as x
       on conflict (key) do update set value = excluded.value`, [JSON.stringify(kv)])
     opsMemo = { at: Date.now(), v }
@@ -1467,7 +1470,7 @@ export function createApp(opts: AppOptions) {
 
   async function issueToken(playerId: string, now: number): Promise<string> {
     const iat = Math.floor(now)
-    return sign({ sub: playerId, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')
+    return sign({ sub: playerId, iat, exp: iat + (opts.tokenTtlSec ?? TOKEN_TTL) }, secret, 'HS256')
   }
 
   // 도배 상한(ratelimit.ts, 2026-10-14 보안 점검): 한 IP가 새 계정을 10분에 NEW_ACCOUNTS_PER_IP개까지(통신사 공유 IP도 넉넉하게),
@@ -2660,8 +2663,8 @@ export function createApp(opts: AppOptions) {
   // --- 보상형 광고 서버 확인(AdMob SSV, ads.ts) ---
   // 앱은 광고를 띄우기 전에 /v1/ads/start로 표를 받아 광고의 custom_data로 넘긴다. AdMob이 끝까지 본 광고마다 /admob/ssv를 서명해 부르면 표가 확인된다.
   // 스위치 = 운영 설정 ops_config ad_ssv: '1'이면 상점 [광고] 상품은 확인된 표가 있어야 받는다(아니면 예전처럼 body.ad = true, 기록에 ssv 여부만 남긴다).
-  // 토스 계정(player_identities provider 'toss')은 '1'이어도 body.ad = true로 받는다 — 토스 미니앱 빌드에는 실제 광고가 없다(ad_player.gd 5초 자리 표시).
-  // ponytail: 토스 로그인은 서버 검증 없는 hash라 누구나 토스 계정을 만들 수 있다 — 토스에 실제 광고가 붙으면 이 예외를 없앤다.
+  // 토스 계정 예외는 없앴다(2026-11-06 보안 점검): 토스 로그인은 서버가 확인할 수 없는 hash라 누구나 토스 계정을 만들어 광고 없이 광고 상품을 받았다.
+  // 켜져 있으면 실제 광고가 없는 앱(토스 미니앱·PC)은 광고 상품을 받지 못한다 — 토스 광고가 붙으면 그쪽 서버 확인을 더한다. 관리자 창 [상태]에서 켜고 끈다.
   const adKey = Ads.keyStore(opts.fetch ?? fetch)
   const adWaitMs = opts.adWaitMs ?? 10_000
   const adUnits = opts.adUnits?.length ? opts.adUnits : Ads.AD_UNITS
@@ -2671,9 +2674,7 @@ export function createApp(opts: AppOptions) {
     const token = typeof raw === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(raw) ? raw : ''
     let required = false
     try {
-      const [r] = await query(`select coalesce((select value from ops_config where key = 'ad_ssv') = '1', false)
-        and not exists (select 1 from player_identities where player_id = $1 and provider = 'toss') as required`, [playerId])
-      required = r?.required === true
+      required = (await opsStatus()).ad_ssv
     } catch {
       required = false
     }
@@ -3728,6 +3729,7 @@ export function createApp(opts: AppOptions) {
     if (R.friendName(id).toLowerCase() === name.toLowerCase()) throw new ApiError(409, 'same_name', 'that is already your nickname')
     const [taken] = await query('select 1 from players where lower(nickname) = lower($1) and id <> $2', [name, id])
     if (taken) throw new ApiError(409, 'name_taken', 'that nickname is taken')
+    if (R.looksDefaultName(name) || G.looksDefaultName(name)) throw new ApiError(400, 'bad_name', 'reserved') // 남의 자동 별명 흉내
     return mutate(c, (p, g) => {
       const price = N.priceOf(p.nickname_changes, nicknameCost(g))
       if (p.diamonds < price) throw new ApiError(409, 'not_enough', 'not enough diamonds')
@@ -4064,9 +4066,13 @@ export function createApp(opts: AppOptions) {
 
   app.post('/v1/guild/create', auth, async (c) => {
     const b = await body(c)
-    const name = strField(b, 'name').trim()
+    const name = strField(b, 'name').normalize('NFC').trim()
     const emblem = intField(b, 'emblem', 0, G.EMBLEMS - 1)
     if ([...name].length < 2 || [...name].length > 8) throw new ApiError(400, 'bad_name', 'name must be 2-8 characters')
+    // 닉네임과 같은 규칙(2026-11-06 보안 점검): 한글·영문·숫자(가운데 띄어쓰기 한 칸 허용)만 — 보이지 않는 글자·방향 바꾸기로 이름을 흉내 내거나
+    // 운영자를 사칭하거나 금칙어를 쓰지 못하게
+    if (!/^[가-힣A-Za-z0-9]+( [가-힣A-Za-z0-9]+)*$/.test(name) || N.check(name.replace(/ /g, '')) === 'bad' || N.check(name.replace(/ /g, '')) === 'reserved'
+      || N.check(name.replace(/ /g, '')) === 'chars') throw new ApiError(400, 'bad_name', 'only Korean, letters and digits; no banned or staff words')
     return guildMutate(c, async (x) => {
       if (!guildOpen(x.pl, x.game)) throw blocked('locked', 'clear round 1-10 first')
       if (x.g) throw blocked('in_guild', 'already in a guild')
@@ -4272,7 +4278,7 @@ export function createApp(opts: AppOptions) {
         return [k, null] as const
       }
     }))
-    return c.json({ server_now: clock(), ...Object.fromEntries(parts) })
+    return c.json({ server_now: clock(), ad_ssv: (await opsStatus()).ad_ssv, ...Object.fromEntries(parts) })
   })
 
   if (opts.allowTestHooks) {

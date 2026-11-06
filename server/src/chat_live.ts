@@ -7,6 +7,9 @@ import type { IncomingMessage, Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
+import { Limiter } from './ratelimit.ts'
+
+const UPGRADES_PER_MIN = 20 // 한 계정이 1분에 열 수 있는 새 연결(다시 연결 포함 — 정상 앱은 몇 번)
 
 export const CHAT_LIVE_PATH = '/v1/chat/live'
 export const MAX_MSG = 1024 // 앱은 보내지 않는다 — 작게
@@ -21,6 +24,8 @@ export class ChatLive {
   // createApp(chat.ts)이 채운다
   verify: (token: string) => Promise<string | null> = async () => null
   private wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MSG })
+  private ipUpgrades = new Limiter(UPGRADES_PER_MIN * 4, 60)
+  private pidUpgrades = new Limiter(UPGRADES_PER_MIN, 60)
   private beat = setInterval(() => this.sweep(), HEARTBEAT_MS).unref()
 
   attach(server: Server) {
@@ -35,7 +40,12 @@ export class ChatLive {
   }
 
   private async accept(req: IncomingMessage, sock: Duplex, head: Buffer, url: URL) {
+    // 연결 도배 막기(2026-11-06 보안 점검): IP·계정마다 1분에 UPGRADES_PER_MIN번까지 새 연결
+    const ip = String(req.headers['cf-connecting-ip'] ?? req.headers['true-client-ip'] ?? '')
+    const now = Date.now() / 1000
+    if (ip && !this.ipUpgrades.take(ip, now)) return refuse(sock, 429)
     const pid = await this.verify(url.searchParams.get('token') ?? '')
+    if (pid && !this.pidUpgrades.take(pid, now)) return refuse(sock, 429)
     if (!pid) {
       sock.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
       sock.destroy()
@@ -94,4 +104,10 @@ function sendRaw(ws: WebSocket, s: string) {
   if (ws.readyState !== 1) return
   if (ws.bufferedAmount > MAX_BUFFER) ws.terminate()
   else ws.send(s)
+}
+
+// 업그레이드 거절(소켓을 닫는다)
+function refuse(sock: Duplex, status: number) {
+  sock.write(`HTTP/1.1 ${status} ${status === 429 ? 'Too Many Requests' : 'Forbidden'}\r\nConnection: close\r\n\r\n`)
+  sock.destroy()
 }

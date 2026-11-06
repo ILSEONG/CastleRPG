@@ -2915,3 +2915,4 @@ economy.change_nickname_3,이미 다른 성주가 쓰는 닉네임입니다,,,,s
 economy.change_nickname_4,지금 닉네임과 같습니다,,,,scripts/economy.gd
 economy.change_nickname_5,쓸 수 없는 닉네임입니다,,,,scripts/economy.gd
 economy.change_nickname_6,닉네임을 바꾸지 못했습니다. 잠시 뒤 다시 해 주세요,,,,scripts/economy.gd
+ad_player.play,이 앱에서는 아직 광고 보상을 받을 수 없습니다,,,,scripts/ad_player.gd
