@@ -83,6 +83,9 @@ func _place_building(b: Dictionary) -> void:
 ## 건물 하나를 Economy에 맞춘다: 자리(자유 건설 — Economy.building_cell)와 모습 셋 중 하나 — 자리를 안 잡은 공터는 숨김(목록의 [건물]에서 짓는다),
 ## 짓는 중인 공터는 흙 바닥 + 말뚝, 다 지은 건물. 탭 판정체·이름표 자리·비계 자리도 그 자리·높이로 다시 만든다.
 func _show_lot(id: String) -> void:
+	if Balance.is_wall(id):
+		_show_wall(id)
+		return
 	var L: Dictionary = lots[id]
 	var placed: bool = Economy.is_placed(id)
 	var lot: bool = not Economy.is_built(id)
@@ -120,6 +123,50 @@ func _show_lot(id: String) -> void:
 		_sync_build()
 
 
+## 성벽 건물(망루, 사용자 2026-11-07 "망루는 성벽 모서리"): 성 안 메시는 없고 성벽 네 모서리 탑이 그 건물이다.
+## 탑마다 탭 판정체(누르면 망루 창 — 아직 못 짓는 때(성채 레벨)는 없다)와 비계 자리, 이름표는 화면 아래(카메라 쪽) 모서리 탑 위 하나.
+func _show_wall(id: String) -> void:
+	var L: Dictionary = lots[id]
+	L.mi.visible = false
+	var placed: bool = Economy.is_placed(id)
+	var lot: bool = not Economy.is_built(id)
+	var open: bool = placed or Economy.upgrade_block(id, Economy.time_now()) != "keep_cap"
+	var key := [lot, placed, open, _keep_look, half]
+	if L.get("key") == key:
+		return
+	if L.lot == true and not lot:
+		_built_now[id] = true
+	L.key = key
+	L.lot = lot
+	L.cell = null
+	for b in L.get("bodies", []):
+		b.queue_free()
+	L.bodies = []
+	if L.body != null:
+		L.body.queue_free()
+		L.body = null
+	var box := TownKit.corner_tower(_keep_look).get_aabb()
+	var c := half + Balance.WALL_T / 2.0
+	var boxes := []
+	var tag_at := Vector3.ZERO
+	for k in 4:
+		var p: Vector3 = (Formation.SIDE_DIR[k] + Formation.SIDE_DIR[(k + 1) % 4]) * c
+		boxes.append(AABB(p + box.position, box.size))
+		if open:
+			var body := _add_tap_body(p, Vector3(box.size.x + 0.6, box.end.y, box.size.z + 0.6))
+			body.set_meta("building", id)
+			L.bodies.append(body)
+		if p.x + p.z > tag_at.x + tag_at.z or k == 0:  # 카메라 쪽(화면 아래) 모서리 — 기본 카메라 yaw 45°는 +x+z 쪽에서 본다
+			tag_at = p
+	sites[id] = boxes
+	if not placed:
+		hidden[id] = true
+		tag_anchors[id] = Vector3.ZERO
+		return
+	hidden.erase(id)
+	tag_anchors[id] = tag_at + Vector3(0, box.end.y + TAG_UP, 0)
+
+
 func _sync_lots() -> void:
 	var lk := GameData.castle_look(Economy.building_level(GameData.KEEP))
 	if lk != _keep_look and lots.has(GameData.KEEP):
@@ -131,7 +178,7 @@ func _sync_lots() -> void:
 			scaffold_id = ""
 			_sync_build()
 	for id in lots:
-		_show_lot(id)
+		_show_lot(id)  # 성벽 건물은 성 모습 단계(탑 크기)도 본다
 
 
 ## 공터(튜토리얼): 흙 바닥 + 네 모서리 말뚝과 줄 + 앞쪽 작은 팻말. size = 부지 칸 수.

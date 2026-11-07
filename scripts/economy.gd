@@ -1064,6 +1064,8 @@ func is_built(id: String) -> bool:
 
 ## 성 안에 서 있는 건물인가(지었거나, 짓기 시작해 자리를 잡은 공터).
 func is_placed(id: String) -> bool:
+	if Balance.is_wall(id):
+		return is_built(id) or is_building(id)  # 성벽 건물(망루): 성 안 자리가 없다 — 짓기 시작했으면 성벽 모서리에 있다
 	return is_built(id) or layout.has(id)
 
 
@@ -1081,7 +1083,7 @@ func placed_cells(except := "") -> Dictionary:
 		if not keys.has(k):
 			keys.append(k)
 	for k in keys:
-		if k == except:
+		if k == except or Balance.is_wall(k):
 			continue
 		if layout.has(k):
 			out[k] = layout[k]
@@ -1156,7 +1158,7 @@ static func _layout_of(v) -> Dictionary:
 	if v is Dictionary:
 		for id in v:
 			var c = v[id]
-			if id is String and not Balance.building(id).is_empty() and c is Array and c.size() == 2 and _num(c[0]) and _num(c[1]):
+			if id is String and not Balance.building(id).is_empty() and not Balance.is_wall(id) and c is Array and c.size() == 2 and _num(c[0]) and _num(c[1]):
 				out[id] = Vector2i(int(c[0]), int(c[1]))
 	return out
 

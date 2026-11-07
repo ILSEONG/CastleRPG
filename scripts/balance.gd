@@ -41,7 +41,7 @@ static var BUILDINGS := [
 	{"id": "goldmine", "name": Lang.t("balance.buildings.goldmine.name"), "size": Vector2i(3, 3)},
 	{"id": "forge", "name": Lang.t("balance.buildings.forge.name"), "size": Vector2i(3, 3)},
 	{"id": "guild_hall", "name": Lang.t("balance.buildings.guild_hall.name"), "size": Vector2i(3, 3)},
-	{"id": "watchtower", "name": Lang.t("balance.buildings.watchtower.name"), "size": Vector2i(3, 3)},
+	{"id": "watchtower", "name": Lang.t("balance.buildings.watchtower.name"), "size": Vector2i(3, 3), "wall": true},  # 성벽 네 모서리 탑(2026-11-07) — 성 안 부지 없음
 	{"id": "dispatch", "name": Lang.t("balance.buildings.dispatch.name"), "size": Vector2i(3, 3)},  # 의뢰(파견) — 의뢰 기능은 따로
 ]
 
@@ -125,7 +125,7 @@ static func entries() -> Array:
 ## id 건물을 cell에 둘 수 없는 이유("" = 된다). half_tiles = 성 내부 한 변 타일 수의 절반, others = 다른 건물 id → 칸(자기 자신은 무시).
 static func placement_block(id: String, cell: Vector2i, half_tiles: int, others: Dictionary) -> String:
 	var b := building(id)
-	if b.is_empty() or FIXED.has(id):
+	if b.is_empty() or FIXED.has(id) or b.get("wall", false):
 		return "fixed"
 	return rect_block(Rect2i(cell, b.size), half_tiles, others, id)
 
@@ -147,6 +147,11 @@ static func rect_block(r: Rect2i, half_tiles: int, others: Dictionary, skip := "
 
 
 ## 건물 항목. 키 "종류#n"(n번째 채)은 그 종류 항목의 복사본(id = 키, 이름 "벌목장 2", 기본 자리 없음).
+## 성벽 건물(망루 — 성벽 네 모서리 탑, 사용자 2026-11-07): 성 안 부지가 없다. 자리 없이 짓고 옮기지 않는다(서버 rules.WALL_TYPES와 같다).
+static func is_wall(id: String) -> bool:
+	return bool(building(id).get("wall", false))
+
+
 static func building(id: String) -> Dictionary:
 	var t := id.get_slice("#", 0)
 	for b in BUILDINGS:

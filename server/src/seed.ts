@@ -137,7 +137,7 @@ export const CONFIG_LIST = ['starter_heroes', 'promote_shards', 'hero_max_levels
 export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'tavern_ssr_per_level', 'tavern_sr_per_level',
   // 2026-10-13 새 건물(창고·금광·대장간·길드 회관·망루) 효과 — 0 이상
   'warehouse_cap_min_per_level', 'goldmine_gold_base', 'goldmine_gold_exp', 'forge_extra_drop_pct_per_level', 'guild_hall_helps_base',
-  'guild_hall_helps_per_level', 'guild_help_pct', 'guild_help_min_sec', 'watchtower_grunt_pct_base', 'watchtower_grunt_pct_per_level',
+  'guild_hall_helps_per_level', 'guild_help_pct', 'guild_help_min_sec', 'watchtower_dmg_base', 'watchtower_dmg_per_level',
   'watchtower_interval_sec', 'watchtower_range_m']
 // 개정 24 연구 설정(checkResearch가 범위를 본다): 비용·시간 성장 ≥ 1, 연구소 속도 ≥ 0, 취소 환불 0..1, 다이아/분 0 이상 정수
 export const CONFIG_RESEARCH_NUM = ['research_cost_growth', 'research_time_growth', 'lab_research_speed_per_level', 'research_cancel_refund', 'research_dia_per_min',

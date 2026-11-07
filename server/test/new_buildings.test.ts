@@ -75,6 +75,26 @@ test('n번째 채·새 건물: 처음엔 공터, 성채 레벨 전엔 keep_cap, 
   assert.equal(up.status, 200, JSON.stringify(up.json))
 })
 
+test('망루(성벽 건물, 2026-11-07): 자리 없이 짓는다 — 자리를 주면 fixed, 옮기기도 fixed, 예전에 고른 자리는 읽을 때 버린다', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  await levels(token, { keep: 12 })
+  assert.equal((await build(token, 'watchtower', [-8, 2])).json.error, 'fixed')
+  const r = await build(token, 'watchtower')
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.player.layout.watchtower, undefined)
+  await done(token)
+  let p = await player(token)
+  assert.deepEqual([p.unbuilt.includes('watchtower'), p.buildings.watchtower.level], [false, 1])
+  assert.equal((await S.req('POST', '/v1/building/move', { token, body: { building: 'watchtower', cell: [-8, 2] } })).json.error, 'fixed')
+  // 예전(성 안 부지) 자리가 저장에 남아 있으면 읽을 때 버린다 — 그 칸에 다른 건물을 지을 수 있다
+  await S.db.query(`update player_state set layout = '{"watchtower": [-8, 2]}'::jsonb where player_id = $1`, [id])
+  p = await player(token)
+  assert.equal(p.layout.watchtower, undefined)
+  const g = await build(token, 'goldmine', [-8, 2])
+  assert.equal(g.status, 200, JSON.stringify(g.json))
+})
+
 test('금광: 분마다 골드가 쌓이고 /v1/collect로 받는다(창고 레벨만큼 상한이 늘어난다)', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()

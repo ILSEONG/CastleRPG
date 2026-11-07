@@ -411,7 +411,7 @@ function layoutOf(v: unknown): Record<string, [number, number]> {
       const cell = R.cellOf(c)
       // 기본 자리 건물 + [건설]로 놓는 새 건물·자원 건물 n번째 채(2026-10-13 — 예전엔 기본 자리 건물만 남겨 새 건물 자리가 다음 읽기에서 사라졌다)
       const ty = R.typeOf(id), n = R.copyIndex(id)
-      if (cell && (ty in R.DEFAULT_CELLS || R.NEW_TYPES.includes(ty)) && Number.isInteger(n) && n >= 1 && n <= 9) out[id] = cell
+      if (cell && (ty in R.DEFAULT_CELLS || R.NEW_TYPES.includes(ty)) && !R.isWallType(id) && Number.isInteger(n) && n >= 1 && n <= 9) out[id] = cell
     }
   }
   return out
@@ -435,7 +435,7 @@ const interiorHalf = (p: Player, g: Game) => Math.floor(R.tierValue(g.config, 'k
 function placedCells(p: Player, except: string): Record<string, [number, number]> {
   const out: Record<string, [number, number]> = {}
   for (const id of new Set([...Object.keys(R.DEFAULT_CELLS), ...Object.keys(p.layout)])) {
-    if (id === except || (p.unbuilt.includes(id) && !p.layout[id])) continue
+    if (id === except || (p.unbuilt.includes(id) && !p.layout[id]) || R.isWallType(id)) continue
     const c = p.layout[id] ?? R.DEFAULT_CELLS[id]
     if (c) out[id] = c
   }
@@ -1977,7 +1977,9 @@ export function createApp(opts: AppOptions) {
       const need = R.unlockKeep(def, building, g.config)
       if (lot && level(p, R.KEEP) < need) throw new ApiError(409, 'keep_cap', `'${building}' needs keep level ${need}`) // 자리보다 먼저
       let layout: Record<string, [number, number]> | undefined
-      if (lot && (building in R.DEFAULT_CELLS || wantCell || p.layout[building])) {
+      if (lot && R.isWallType(building)) {
+        if (wantCell) throw new ApiError(409, 'fixed', `'${building}' stands on the castle corners`) // 성벽 건물: 자리 없이 짓는다
+      } else if (lot && (building in R.DEFAULT_CELLS || wantCell || p.layout[building])) {
         const cell = wantCell ?? p.layout[building] ?? R.DEFAULT_CELLS[building]
         const where = R.placementBlock(building, cell, interiorHalf(p, g), placedCells(p, building))
         if (where) throw new ApiError(409, where, `cannot build '${building}' at ${cell}: ${where}`)

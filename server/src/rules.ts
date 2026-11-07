@@ -243,6 +243,9 @@ export const GUILD_HALL = 'guild_hall' // 건설·연구 시작 때 길드 도�
 export const WATCHTOWER = 'watchtower' // 전투에서 화살(앱)
 export const DISPATCH = 'dispatch' // 파견소(2026-10-13): 의뢰 수·효과는 의뢰 기능이 levels.dispatch로 읽는다
 export const NEW_TYPES = [WAREHOUSE, GOLDMINE, FORGE, GUILD_HALL, WATCHTOWER, DISPATCH] // 기본 자리 없음 — [건설]로 놓는다
+// 성벽 건물(사용자 2026-11-07 "망루는 성벽 모서리"): 성 안 부지가 없다(네 모서리 탑이 그 건물) — 자리 없이 짓고, 자리·옮기기는 없다
+export const WALL_TYPES = [WATCHTOWER]
+export const isWallType = (id: string) => WALL_TYPES.includes(typeOf(id))
 export const COPY_TIERS = 'res_copy_tiers' // 성채 레벨 → 자원 건물 종류마다 지을 수 있는 채 수 "1:1|5:2|…"
 const copyTiers = (config: Config) => parseTiers(config[COPY_TIERS] ?? '') ?? [[1, 1]]
 export const copiesAt = (config: Config, keepLevel: number) => {
@@ -269,7 +272,7 @@ const overlap = (a: number[], b: number[]) => a[0] < b[0] + b[2] && b[0] < a[0] 
 
 // id 건물을 cell에 둘 수 없는 이유('' = 된다): fixed·out·road·square·overlap. halfTiles = 성 내부 한 변 타일 수 / 2, others = 다른 건물 → 칸.
 export function placementBlock(id: string, cell: [number, number], halfTiles: number, others: Record<string, [number, number]>): string {
-  if (!(typeOf(id) in DEFAULT_CELLS || NEW_TYPES.includes(typeOf(id))) || id === KEEP) return 'fixed'
+  if (!(typeOf(id) in DEFAULT_CELLS || NEW_TYPES.includes(typeOf(id))) || id === KEEP || isWallType(id)) return 'fixed'
   const [w, h] = plotSize(id)
   const r = [cell[0], cell[1], w, h]
   const m = halfTiles - WALL_MARGIN_TILES

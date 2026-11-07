@@ -518,9 +518,8 @@ static func effect_lines(id: String, lv: int) -> Array:
 		"guild_hall":
 			return [[Lang.t("building_panel.effect_lines_8"), Lang.t("building_panel.effect_lines_9") % GameData.guild_helps(lv), Lang.t("building_panel.effect_lines_9") % GameData.guild_helps(n)]]
 		"watchtower":
-			var p0 := GameData.config_num("watchtower_grunt_pct_base")
-			var p1 := GameData.config_num("watchtower_grunt_pct_per_level")
-			return [[Lang.t("building_panel.effect_lines_10"), Lang.t("building_panel.effect_lines_11") % Skills.num_text(p0 + p1 * lv), Lang.t("building_panel.effect_lines_11") % Skills.num_text(p0 + p1 * n)]]
+			var WT := preload("res://scripts/watchtower.gd")  # 레벨로만 정한 고정 피해(2026-11-07) — 네 모서리 탑이 하나씩 쏜다
+			return [[Lang.t("building_panel.effect_lines_10"), Lang.t("building_panel.effect_lines_11") % Skills.num_text(WT.damage(lv)), Lang.t("building_panel.effect_lines_11") % Skills.num_text(WT.damage(n))]]
 		"keep":
 			var hp := 1.0 + float(rb.castle_hp_pct) / 100.0
 			var rows := [[Lang.t("building_panel.effect_lines_12"), "Lv %d" % lv, "Lv %d" % n],

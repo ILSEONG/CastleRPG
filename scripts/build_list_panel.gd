@@ -315,7 +315,7 @@ func _refresh() -> void:
 		var cost_sig := ""  # 비용 칸 지문 — 바뀔 때만 다시 만든다(처치마다 다시 만들어 끌던 카드 줄이 깜빡였다, 2026-10-14)
 		if Economy.is_built(id):
 			r.status.text = "" if Economy.no_levels(id) else "Lv %d" % Economy.building_level(id)  # 주점은 레벨이 없다(2026-10-18)
-			r.action_label.text = MOVE_TEXT
+			r.action_label.text = VIEW_TEXT if Balance.is_wall(id) else MOVE_TEXT  # 성벽 건물(망루)은 옮기지 않는다 — 건물 창
 			color = UiKit.STEEL
 		elif Economy.is_placed(id):
 			r.status.text = Lang.t("build_list_panel.refresh") if Economy.is_building(id) else Lang.t("build_list_panel.refresh_2")
@@ -403,7 +403,7 @@ func _on_pressed(id: String) -> void:
 	if why != "":
 		Economy.notice.emit(why)
 		return
-	if not Economy.is_built(id) and Economy.is_placed(id):
+	if (not Economy.is_built(id) and Economy.is_placed(id)) or Balance.is_wall(id):  # 성벽 건물(망루): 자리 고르기 없이 건물 창에서 짓는다
 		close()
 		if building_panel != null:
 			building_panel.open_building(id)

@@ -356,7 +356,7 @@ func _tutorial_goto(target: String) -> void:
 	match kind:
 		"building":
 			var b := Balance.building(arg)
-			if not b.is_empty() and not Economy.is_placed(arg) and not Tutorial.build_locked(arg):
+			if not b.is_empty() and not Economy.is_placed(arg) and not Tutorial.build_locked(arg) and not b.get("wall", false):
 				_tutorial_ui.placement.start(arg)  # 자리를 안 잡은 공터(자유 건설): 바로 자리 고르기
 				return
 			if not b.is_empty():

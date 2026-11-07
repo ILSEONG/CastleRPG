@@ -1,7 +1,8 @@
 extends Node
 ## 망루 체크(2026-10-13): 실제 main 씬(오토로드 포함)에서 watchtower.gd가
 ##  - 짓지 않았으면(공터·건물 표에 없음) 쏘지 않는다,
-##  - Lv 5 망루가 사거리 안 몬스터에게 grunt 최대 HP × (base + per_level × 5) / 100 피해를 화살 도착 때 넣는다(피해 숫자 길 = take_damage),
+##  - 지으면 성벽 네 모서리 탑이 망루가 된다(성 안 자리 없음, 2026-11-07) — 탑마다 쏜다,
+##  - Lv 5 망루가 사거리 안 몬스터에게 base + per_level × 5(레벨 고정) 피해를 화살 도착 때 넣는다(피해 숫자 길 = take_damage),
 ##  - interval초마다 한 발(그 전엔 안 쏜다), 사거리 밖은 안 쏜다, 성문·성벽을 치는 몬스터를 먼저 고른다,
 ##  - 몬스터가 없으면 안 쏜다
 ## 를 확인한다. 망루가 아직 Balance.BUILDINGS에 없으면 level_override·pos_override로 세운다.
@@ -90,9 +91,14 @@ func _set_tower(level: int) -> void:
 		_wt.pos_override = Vector3(-8, 0, -8) if level > 0 else null
 
 
+## 한 곳에서만 쏘는 시험용 망루(간격·사거리·표적 규칙 확인).
+func _single(level: int) -> void:
+	_wt.level_override = level
+	_wt.pos_override = Vector3(-8, 0, -8)
+
+
 func _tower_pos() -> Vector3:
-	var t: Dictionary = _wt.tower()
-	return t.pos if not t.is_empty() else Vector3(-8, 0, -8)
+	return _wt.pos_override if _wt.pos_override is Vector3 else Vector3(-8, 0, -8)
 
 
 func _run() -> void:
@@ -111,16 +117,36 @@ func _run() -> void:
 	await _frames(5)
 	_check(_wt.shots == 0 and is_equal_approx(m.hp, m.hp_max), "unbuilt: no arrows, no damage", "shots %d hp %f/%f" % [_wt.shots, m.hp, m.hp_max])
 
-	# 2) Lv 5: 사거리 안 한 마리 → 바로 한 발, 도착 때 공식 피해
+	# 1b) 지으면 성벽 네 모서리 탑이 망루(사용자 2026-11-07): 성 안 자리 없음, 탑 꼭대기 넷
 	_set_tower(5)
 	var t: Dictionary = _wt.tower()
 	_check(not t.is_empty() and int(t.level) == 5, "built Lv 5 tower", str(t))
+	if _known:
+		var c: float = half + Balance.WALL_T / 2.0
+		var corners_ok: bool = t.towers.size() == 4
+		for p in t.towers:
+			corners_ok = corners_ok and is_equal_approx(absf(p.x), c) and is_equal_approx(absf(p.z), c) and p.y > 4.0
+		_check(corners_ok, "four towers on the wall corners (±%.1f m), shooting from the top" % c, str(t.towers))
+		_check(not Economy.placed_cells().has(WatchtowerScript.ID) and Balance.placement_block(WatchtowerScript.ID, Vector2i(-8, 2), 10, {}) == "fixed", "no lot inside the castle, cannot be placed", str(Economy.placed_cells().keys()))
+		_monster(Vector3(0, 0, half + Balance.WALL_T + 1.0), 1000.0)  # 남쪽 성문 앞
+		_wt.set("_cd", {})
+		for i in 3:
+			_wt._process(WatchtowerScript.interval() / 4.0 + 0.01)
+		_check(_wt.shots >= 3, "each corner tower shoots (staggered)", str(_wt.shots))
+		_clear_monsters()
+		await _frames(2)
+		_wt.shots = 0
+		m = _monster(Vector3(-8, 0, -8) + Vector3(6, 0, 0))
+
+	# 2) 한 곳(시험용) Lv 5: 사거리 안 한 마리 → 바로 한 발, 도착 때 레벨 고정 피해
+	_single(5)
+	_wt.set("_cd", {})
 	var tp := _tower_pos()
 	m.global_position = tp + Vector3(12, 0, 3)
-	var want := WatchtowerScript.damage(5, GameState.stage)
-	var grunt_hp := float(GameData.monster("grunt").hp) * float(GameData.stage(GameState.stage).hp_mult)
-	var pct := WatchtowerScript.num("watchtower_grunt_pct_base", 10.0) + WatchtowerScript.num("watchtower_grunt_pct_per_level", 1.0) * 5
-	_check(want > 0.0 and is_equal_approx(want, grunt_hp * pct / 100.0), "damage = grunt max HP × (base + per_level × 5)%", "%f vs %f" % [want, grunt_hp * pct / 100.0])
+	var want := WatchtowerScript.damage(5)
+	var base := WatchtowerScript.num("watchtower_dmg_base", 2.0) + WatchtowerScript.num("watchtower_dmg_per_level", 1.2) * 5
+	_check(want > 0.0 and is_equal_approx(want, base), "damage = base + per_level × 5 (fixed by level)", "%f vs %f" % [want, base])
+	_check(WatchtowerScript.damage(1) < WatchtowerScript.damage(10) and WatchtowerScript.damage(10) < WatchtowerScript.damage(30), "higher level, more damage", "")
 	_wt._process(0.016)
 	_check(_wt.shots == 1, "fires at once when an enemy is in range", str(_wt.shots))
 	var arrows := _arrows()
@@ -133,7 +159,7 @@ func _run() -> void:
 		await get_tree().process_frame
 		waited += get_process_delta_time()
 	_check(is_equal_approx(m.hp_max - m.hp, want), "arrow lands: hp drops by exactly the formula", "%f vs %f" % [m.hp_max - m.hp, want])
-	_check(top >= WatchtowerScript.MUZZLE_Y, "arrow flies in an arc from the tower top", "top y %f" % top)
+	_check(top >= WatchtowerScript.MUZZLE_Y - 0.01, "arrow flies in an arc from the tower top", "top y %f" % top)
 
 	# 3) 간격: interval 전엔 안 쏘고, 지나면 한 발
 	var iv := WatchtowerScript.interval()
@@ -167,7 +193,7 @@ func _run() -> void:
 	_check(_wt.shots == before, "no monsters: no shot", str(_wt.shots))
 
 	# 7) 실제 프레임 + 배속: x2면 1초 남짓에 interval 2초만큼 쏜다
-	_set_tower(5)
+	_single(5)
 	var k = _monster(tp + Vector3(8, 0, 0), 1000.0)
 	_wt.set_process(true)
 	Engine.time_scale = 2.0

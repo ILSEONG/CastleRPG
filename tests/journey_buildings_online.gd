@@ -169,6 +169,18 @@ func _phase_new_buildings() -> void:
 		await _frames(10)
 		if id == "warehouse":
 			await _placement_refusals(id)
+		if Balance.is_wall(id):  # 망루(2026-11-07): 성벽 네 모서리 탑 — 자리 없이 건물 창에서 짓는다, 서버도 자리를 받지 않는다
+			var why := await _raw("POST", "/v1/building/upgrade", {"building": id, "cell": [-8, 2]})
+			_check(Economy.place_block(id, Vector2i(-8, 2)) == "fixed" and why == "fixed", "(new) %s cannot take a cell" % id, why)
+			var t1 := Economy.time_now()
+			_check(Economy.upgrade(id, t1) and Economy.is_building(id) and not Economy.layout.has(id) and Economy.is_placed(id), "(new) %s starts without a cell" % id, str(Economy.layout))
+			await _settle()
+			_check(not _notes.has(EconomyScript.ROLLBACK_TEXT) and Economy.is_building(id), "(new) server accepted %s" % id, str(_notes.slice(-3)))
+			await _request("/v1/test/build_now", {})
+			await _settle()
+			_check(not Economy.unbuilt.has(id) and Economy.building_level(id) == 1 and not Economy.layout.has(id) and not Economy.placed_cells().has(id), "(new) %s built at Lv 1 on the wall corners" % id, str(Economy.layout))
+			await _diff("(new) %s built" % id)
+			continue
 		c = Economy.free_cell(id, Vector2i(0, 0))
 		_check(c != null, "(new) a free cell for %s exists" % id, "")
 		if c == null:

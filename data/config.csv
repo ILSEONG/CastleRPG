@@ -135,7 +135,7 @@ guild_hall_helps_base,2
 guild_hall_helps_per_level,1
 guild_help_pct,0
 guild_help_min_sec,1200
-watchtower_grunt_pct_base,10
-watchtower_grunt_pct_per_level,1
+watchtower_dmg_base,2
+watchtower_dmg_per_level,1.2
 watchtower_interval_sec,2
 watchtower_range_m,60
