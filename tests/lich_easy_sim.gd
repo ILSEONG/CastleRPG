@@ -6,6 +6,7 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 const BattleScript := preload("res://scripts/party_battle.gd")
+const PartyRules := preload("res://scripts/party_rules.gd")
 
 var _main
 var _hero := "hans"
@@ -13,6 +14,8 @@ var _lv := 20
 var _promo := 0
 var _runs := 3
 var _scale := 1.0
+var _diff := 1
+var _search := false
 
 
 func _ready() -> void:
@@ -25,6 +28,10 @@ func _ready() -> void:
 			_promo = int(a.substr(8))
 		elif a.begins_with("--scale="):
 			_scale = float(a.substr(8))
+		elif a.begins_with("--diff="):
+			_diff = int(a.substr(7))
+		elif a == "--search":
+			_search = true
 		elif a.begins_with("--runs="):
 			_runs = int(a.substr(7))
 	Economy.save_path = ""
@@ -43,9 +50,23 @@ func _ready() -> void:
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(30)
+	Party._local = {"quests": {"lich": {"best": PartyRules.DIFFS, "day": -1, "clears": 0}}}
+	Party.view.quests = Party._local_quests()
+	if _search:  # 이기는 가장 낮은 레벨(난이도 _diff, 한 판씩 이분 탐색 — 레벨에 맞는 승급)
+		var lo := 1
+		var hi := 300
+		while lo < hi:
+			var mid := (lo + hi) / 2
+			if await _one(mid):
+				hi = mid
+			else:
+				lo = mid + 1
+		print("LICHSEARCH diff %d %s: min Lv %d promo %d power %d" % [_diff, _hero, lo, _promo_of(lo), GameData.hero_power(GameData.hero(_hero), lo, _promo_of(lo), {})])
+		get_tree().quit(0)
+		return
 	var rows := []
 	for i in _runs:
-		Party.start_queue("lich", 1, _hero, Party.pick_soldiers())
+		Party.start_queue("lich", _diff, _hero, Party.pick_soldiers())
 		await _wait_until(func(): return _battle() != null, 10.0)
 		var b = _battle()
 		if b == null:
@@ -66,6 +87,31 @@ func _ready() -> void:
 		await _frames(30)
 	print("LICH %s Lv%d promo %d x%.1f: %d / %d wins" % [_hero, _lv, _promo, _scale, rows.filter(func(r): return r[1]).size(), rows.size()])
 	get_tree().quit(0)
+
+
+func _promo_of(lv: int) -> int:
+	return clampi(ceili(lv / 50.0) - 1, 0, GameData.MAX_PROMOTION)
+
+
+func _one(lv: int) -> bool:
+	Economy.hero_levels[_hero] = lv
+	Economy.hero_promotions[_hero] = _promo_of(lv)
+	Party.start_queue("lich", _diff, _hero, Party.pick_soldiers())
+	await _wait_until(func(): return _battle() != null, 10.0)
+	var b = _battle()
+	if b == null:
+		print("  battle did not open")
+		return false
+	await _wait_until(func(): return not is_instance_valid(b) or b.done, 900.0)
+	var win: bool = is_instance_valid(b) and b.result.get("win", false)
+	print("  try diff %d Lv %d -> %s (%.0f s)" % [_diff, lv, "WIN" if win else "lose", b.clock if is_instance_valid(b) else -1.0])
+	for k in 2:
+		if is_instance_valid(b) and b.hud != null:
+			b.hud._on_leave()
+		await get_tree().create_timer(0.5).timeout
+	await _wait_until(func(): return _battle() == null and Party.state() == "idle", 10.0)
+	await _frames(30)
+	return win
 
 
 func _battle():
