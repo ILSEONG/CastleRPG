@@ -144,8 +144,12 @@ export function opsGate(d: Any) {
     const st: OpsStatus = await d.status()
     const v = c.req.header('x-app-version') ?? ''
     // 버전을 안 보내거나 모양이 틀려도 낮은 버전으로 본다(2026-11-06 보안 점검 — 고친 옛 앱이 헤더를 빼 강제 업데이트를 넘지 못하게)
+    // 관리자는 통과한다(2026-11-07): 최소 버전을 자기 앱보다 높게 올려도 그 앱으로 되돌릴 수 있게(점검과 같다)
     if (st.min_version && (!VERSION_RE.test(v) || cmpVersion(v, st.min_version) < 0) && !OPEN_IN_UPDATE.some((re) => re.test(path))) {
-      return c.json({ error: 'update_required', message: 'please update the app', min_version: st.min_version, store_url: st.store_url }, 426)
+      const id = await d.tokenPlayer(c)
+      if (!id || !(await d.isAdmin(id))) {
+        return c.json({ error: 'update_required', message: 'please update the app', min_version: st.min_version, store_url: st.store_url }, 426)
+      }
     }
     if (st.maintenance && !OPEN_IN_MAINTENANCE.some((re) => re.test(path))) {
       const id = await d.tokenPlayer(c)
