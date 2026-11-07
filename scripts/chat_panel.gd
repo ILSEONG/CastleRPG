@@ -23,6 +23,8 @@ const TEXT := Color(0.16, 0.18, 0.24)  # 먹색(HudScript.INK)
 const NAME_COLOR := Color(0.14, 0.33, 0.60)
 const ME_COLOR := Color(0.70, 0.40, 0.04)
 const REPORTED := Color(0.78, 0.20, 0.16)
+const PARTY_COLOR := Color(0.62, 0.30, 0.62)  # 파티 모집 머리표(보라 — 채널 색과 겹치지 않게)
+const PartyRules := preload("res://scripts/party_rules.gd")
 static var CH_NAMES := {"all": Lang.t("chat_panel.ch_names.all"), "guild": Lang.t("chat_panel.ch_names.guild"), "system": Lang.t("chat_panel.ch_names.system")}
 const CH_COLORS := {"all": Color(0.45, 0.32, 0.18), "guild": Color(0.16, 0.48, 0.22), "system": Color(0.74, 0.40, 0.02)}
 static var TABS := [["all", Lang.t("chat_panel.tabs")], ["guild", Lang.t("chat_panel.tabs_2")], ["system", Lang.t("chat_panel.tabs_3")], ["reports", Lang.t("chat_panel.tabs_4")]]
@@ -420,6 +422,11 @@ func _line(m: Dictionary) -> Control:
 	row.add_child(t)
 	row.add_child(l)
 	var tag := "[color=#%s][lb]%s][/color] " % [CH_COLORS.get(ch, TEXT).to_html(false), CH_NAMES.get(ch, "")]
+	var card = m.get("party")
+	if card is Dictionary and ch != "system":
+		_party_card(row, l, tag, m, card)
+		p.add_child(row)
+		return p
 	if ch == "system":
 		l.text = tag + "[color=#%s]%s[/color]" % [CH_COLORS.system.to_html(false), _esc(str(m.text))]
 	else:
@@ -429,6 +436,39 @@ func _line(m: Dictionary) -> Control:
 			l.text += Lang.t("chat_panel.line") % REPORTED.to_html(false)
 	p.add_child(row)
 	return p
+
+
+## 파티원 모집 초대장(2026-11-07 사용자 "파티원 모집 버튼 … 채팅에 파티 초대장"): 메이플스토리 파티 모집 글처럼 한 줄 + 오른쪽 [참가].
+## 글 = [전체] 이름: [파티 모집] 리치의 무덤 · 쉬움 (1/4). 자리가 찼거나 파티가 없어졌거나(받은 때 기준) RECRUIT_TTL_SEC이 지나면 [마감], 내 글이면 [내 파티].
+func _party_card(row: HBoxContainer, l: RichTextLabel, tag: String, m: Dictionary, card: Dictionary) -> void:
+	var mine: bool = m.get("me", false)
+	var q := str(card.get("quest", ""))
+	var d := clampi(int(card.get("diff", 1)), 1, PartyRules.DIFFS)
+	var body := "%s · %s (%d/%d)" % [PartyRules.NAMES.get(q, q), PartyRules.DIFF_NAMES[d - 1], int(card.get("count", 1)), int(card.get("size", 4))]
+	var nc := ME_COLOR if mine else NAME_COLOR
+	l.text = tag + Lang.t("chat_panel.party_card") % [nc.to_html(false), _esc(str(m.name)), PARTY_COLOR.to_html(false), _esc(body)]
+	var open: bool = card.get("open", false) == true and Chat._now() - float(m.get("at", 0)) < Party.RECRUIT_TTL_SEC
+	var mine_party := str(Party.lobby().get("code", "")) == str(card.get("code", "")) and Party.in_lobby()
+	var b := Button.new()
+	b.text = Lang.t("chat_panel.party_card_2") if mine_party else (Lang.t("chat_panel.party_card_3") if open else Lang.t("chat_panel.party_card_4"))
+	b.custom_minimum_size = Vector2(88, 40)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.add_theme_font_override("font", FONT)
+	b.add_theme_font_size_override("font_size", 19)
+	UiKit.apply_button(b, UiKit.AMBER if open and not mine_party else UiKit.STEEL, 10.0)
+	b.disabled = mine_party or not open
+	b.pressed.connect(func():
+		b.disabled = true
+		Party.join_from_card(card, func(ok, text):
+			if ok:
+				close()
+			else:
+				if is_instance_valid(b):
+					b.disabled = false
+				if text != "":
+					show_notice(text)))
+	buttons["party_join:%d" % int(m.get("id", 0))] = b
+	row.add_child(b)
 
 
 ## 관리자 [신고] 탭: 최근 신고(신고한 사람 → 신고된 사람, 시각, 메시지 원문, 당시 앞뒤 채팅 — 신고된 줄은 빨갛게).

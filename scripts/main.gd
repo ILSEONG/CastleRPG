@@ -213,6 +213,11 @@ func _build_world() -> void:
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집·상점(상인은 NPC 탭, 길드는 오른쪽 아래 메뉴)
 	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit, "shop": shop_panel}
 	add_child(tabs)
+	# 채팅 파티 초대장 [참가] → 던전 창 [파티] 탭(내 파티가 보인다)
+	Party.show_party.connect(func():
+		if not dungeon_panel.is_open():
+			tabs.press("dungeon")
+		dungeon_panel.set_section("party"))
 	var card = preload("res://scripts/tutorial_card.gd").new()  # 튜토리얼 미션 카드(새 게임만, 탭 바 위)
 	card.tags = tags
 	card.tabs = tabs  # 탭 바가 숨으면(가이드 첫 전투 전) 카드가 내려간다
