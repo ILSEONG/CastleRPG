@@ -164,6 +164,7 @@ func _spawn_heroes() -> void:
 		u.party = self
 		u.seat = i
 		u.mine = i == me
+		u.set_meta("team_bar", i == me)  # 머리 위 체력바: 내 것 파랑, 다른 성주 초록(hp_bars.gd)
 		u.squad = i
 		u.idle_dir = -ArenaKit.DOWN
 		var p: Vector3 = _seat_spots[mini(i, _seat_spots.size() - 1)]
@@ -195,6 +196,7 @@ func _spawn_soldiers() -> void:
 			var home: Vector3 = base + ArenaKit.RIGHT * ((k % 2) - 0.5) * SOLDIER_GAP + ArenaKit.DOWN * (k / 2) * SOLDIER_GAP
 			s.setup_party({"hp": float(x.get("hp", 0.0)), "atk": float(x.get("atk", 0.0))}, i, home)
 			s.party = self
+			s.set_meta("team_bar", i == me)
 			s.outfit = PartyRules.SEAT_COLORS[i % PartyRules.SEAT_COLORS.size()]
 			s.march_dir = -ArenaKit.DOWN
 			add_child(s)
@@ -649,6 +651,13 @@ func leave() -> void:
 	if _leaving:
 		return
 	_leaving = true
+	# 결과를 아직 안 보냈으면 지금 보낸다(방장이 방의 end를 기다리던 6초 안·결과 화면에서 바로 나감 — 안 보내면 서버가 이 성주를 판에 둔 채라 "매칭 중"에 묶였다)
+	if not done:
+		done = true
+		phase = Phase.RESULT
+		result = {"win": false, "reason": "forfeit"}
+	report_result()
+	Party.left_match(str(run.get("match_id", "")))
 	if main != null:
 		main.leave_dungeon.call_deferred()
 	else:

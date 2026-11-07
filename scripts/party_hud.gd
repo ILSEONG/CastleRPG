@@ -11,6 +11,7 @@ const ResultBanner := preload("res://scripts/result_banner.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const ItemText := preload("res://scripts/item_text.gd")
 const PartyRules := preload("res://scripts/party_rules.gd")
+const HpBars := preload("res://scripts/hp_bars.gd")
 
 const HP_GREEN := Color(0.35, 0.8, 0.4)
 const HP_RED := Color(0.86, 0.3, 0.24)
@@ -147,7 +148,7 @@ func _build_seats(root: Control) -> void:
 		bar.custom_minimum_size = Vector2(0, 10)
 		bar.show_percentage = false
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		UiKit.apply_bar(bar, HP_GREEN)
+		UiKit.apply_bar(bar, HpBars.MINE_COLOR if i == battle.me else HP_GREEN)  # 내 자리 파랑(머리 위 바와 같은 색)
 		box.add_child(bar)
 		rows.append({"seat": i, "bar": bar, "count": count})
 

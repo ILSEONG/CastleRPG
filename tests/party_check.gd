@@ -226,6 +226,24 @@ func _run() -> void:
 		b2.hud._on_leave()
 		await _frames(4)
 		_check(_battle() == null and Party.state() == "idle", "forfeit leaves and frees the queue")
+	# 2026-11-07 "중간에 나가면 계속 매칭 중": 방장이 방의 end를 기다리는 사이(결과 안 보냄)에 나가도 결과를 보내고 매치를 놓는다,
+	# 서버가 늦게 live로 답해도(나온 매치) 대기 없음 — [매칭 시작]이 다시 켜진다
+	Party.set_auto_accept(true)
+	view.buttons["start:lich"].pressed.emit()
+	await get_tree().create_timer(2.6).timeout
+	await _frames(4)
+	var b4 = _battle()
+	if b4 != null:
+		var mid := str(b4.run.get("match_id", ""))
+		b4.done = true
+		b4.result = {"win": false, "reason": "wipe", "pending": true}
+		b4.leave()
+		await _frames(4)
+		var reported: bool = b4._reported if is_instance_valid(b4) else true
+		Party._take({"party": {"quests": Party.view.get("quests", {}), "queue": {"state": "live", "match_id": mid, "run_id": "x", "quest": "lich", "diff": 1}}})
+		await _frames(2)
+		_check(reported and _battle() == null and Party.state() == "idle" and not view.buttons["start:lich"].disabled,
+			"leaving while the result was not sent yet still reports it, and a late live answer for that match stays idle (start is on)")
 	Party.set_auto_accept(false)
 
 

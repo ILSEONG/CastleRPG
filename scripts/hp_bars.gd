@@ -13,6 +13,10 @@ const CHAMFER := 1.5          # 바 모서리 깎기 px
 const SCREEN_MARGIN := 40.0   # 화면 밖 이만큼까지는 그린다(가장자리 걸친 유닛)
 const HERO_COLOR := Color(0.35, 0.85, 0.40)
 const MONSTER_COLOR := Color(0.92, 0.28, 0.22)
+## 여러 사람이 함께 싸우는 판(파티 던전·길드전, 2026-11-07 사용자 "여러 사람과 함께 팀을 이루는 컨텐츠는 내 유닛 체력바가 파란색으로"):
+## 유닛 메타 "team_bar"(true = 내 것)가 있으면 내 유닛은 파랑, 다른 성주 유닛은 초록(로스트아크·WoW 파티처럼 나와 아군을 색으로 나눈다).
+const MINE_COLOR := Color(0.25, 0.55, 1.0)
+const ALLY_COLOR := Color(0.35, 0.85, 0.40)
 const BACK := Color(0, 0, 0, 0.55)
 const CHEVRON_W := 12.0       # 갈매기 하나 폭·높이·두께·간격(px)
 const CHEVRON_H := 5.0
@@ -64,7 +68,10 @@ func _add_group(group: String, color: Color, view: Rect2) -> void:
 		add_octagon(top_left - Vector2(BORDER, BORDER), Vector2(w + BORDER * 2.0, BAR_H + BORDER * 2.0), CHAMFER + BORDER, BACK)
 		var fw := w * clampf(u.hp_ratio(), 0.0, 1.0)
 		if fw > 0.5:
-			add_octagon(top_left, Vector2(fw, BAR_H), CHAMFER, color)
+			var c := color
+			if u.has_meta("team_bar"):
+				c = MINE_COLOR if u.get_meta("team_bar") else ALLY_COLOR
+			add_octagon(top_left, Vector2(fw, BAR_H), CHAMFER, c)
 		var tier = u.get("tier")
 		if tier is int:  # 병사: 바 위에 아래부터 쌓는다(테두리 = 같은 모양을 크게 먼저)
 			for i in tier:

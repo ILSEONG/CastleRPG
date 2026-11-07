@@ -386,6 +386,7 @@ func add_squad(s: Dictionary) -> void:
 		u.squad = squad
 		u.lane = lane
 		u.mine = mine_squad
+		u.set_meta("team_bar", mine_squad)  # 머리 위 체력바: 내 것 파랑, 길드원 초록(hp_bars.gd)
 		u.war_half = half
 		u.battle = self
 		u.idle_dir = -Formation.SIDE_DIR[lane]

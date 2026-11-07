@@ -38,6 +38,7 @@ var save_path := SAVE_PATH
 var econ
 var started_match := ""  # battle_started를 보낸 매치(같은 매치로 두 번 열지 않는다)
 var finishing := {}  # run_id → true(결과를 보내는 중)
+var left_matches := {}  # 전투 장면을 닫고 나온 매치 id → true. 서버가 아직 live로 답해도(결과 전송 실패·늦음) 대기 없음으로 본다
 
 var invites := []  # 받은 초대 [{id, name, quest, diff, code, left, until}](서버 GET /v1/party/invites)
 var _poll := 0.0
@@ -422,7 +423,7 @@ func _take(d) -> void:
 		return
 	var p: Dictionary = d.party
 	var q = p.get("queue")
-	if q is Dictionary and str(q.get("state", "")) == "live" and finishing.size() > 0:
+	if q is Dictionary and str(q.get("state", "")) == "live" and (finishing.size() > 0 or left_matches.has(str(q.get("match_id", "")))):
 		p.queue = {"state": "idle"}  # 결과를 보내는 중인 판(서버가 놓아주기 전 응답) — 다시 열지 않는다
 		q = p.queue
 	var old := queue()
@@ -550,6 +551,17 @@ func decline_invite(inv: Dictionary) -> void:
 	invites_changed.emit()
 	if online():
 		econ.net.send("POST", "/v1/party/invite/decline", {"id": id}, func(_d): pass, Callable(), true, false)
+
+
+## 전투 장면을 닫았다(2026-11-07 사용자 "파티 던전에서 중간에 나가면 계속 매칭 중으로 떠"): 그 매치는 끝난 것으로 보고 바로 대기 없음으로.
+func left_match(match_id: String) -> void:
+	if match_id == "":
+		return
+	left_matches[match_id] = true
+	var q := queue()
+	if str(q.get("state", "")) in ["live", "confirm"] and str(q.get("match_id", "")) == match_id:
+		view.queue = {"state": "idle"}
+		changed.emit()
 
 
 ## 판 결과(방장이든 아니든 각자 보낸다 — 서버는 방장이 방에서 알린 결과를 쓴다). 결과는 result_ready.
