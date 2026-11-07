@@ -26,6 +26,7 @@ export interface QuestFacts {
   pouchesLeft?: number // 남은 방치 주머니 수
   shopFreeToday?: boolean // 오늘 상점 일일 무료 선물을 받았다
   promoted?: boolean // 승급한 영웅이 있다
+  nicknameChanged?: boolean // 닉네임을 한 번이라도 바꿨다(가이드 nickname, 2026-11-07)
 }
 
 const t = (f: QuestFacts, k: string) => f.c.t[k] ?? 0
@@ -59,6 +60,7 @@ export function tutorialDone(id: string, f: QuestFacts): boolean {
     case 'mission_claim': return !fresh(f) || since(f, 'mission_claim') >= 1
     case 'shop_free': return f.shopFreeToday === undefined || f.shopFreeToday
     case 'promote': return f.promoted === undefined || f.promoted
+    case 'nickname': return f.nicknameChanged === undefined || f.nicknameChanged
     case 'hero_level': return f.heroLevels.some((lv) => lv >= 2)
     case 'growth': return Object.values(f.upgrades).some((v) => v > 0)
     case 'gacha': return since(f, 'gacha') >= 10 || f.heroIds.some((h) => !f.starters.includes(h))
