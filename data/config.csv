@@ -133,8 +133,8 @@ goldmine_gold_exp,1.5
 forge_extra_drop_pct_per_level,2
 guild_hall_helps_base,2
 guild_hall_helps_per_level,1
-guild_help_pct,1
-guild_help_min_sec,60
+guild_help_pct,0
+guild_help_min_sec,1200
 watchtower_grunt_pct_base,10
 watchtower_grunt_pct_per_level,1
 watchtower_interval_sec,2

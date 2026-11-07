@@ -218,7 +218,7 @@ const plotSize = (id: string): [number, number] => PLOT_SIZE[typeOf(id)] ?? [3, 
 // --- 새 건물·자원 건물 여러 채(사용자 2026-10-13) ---
 // 효과 수치(config): 창고 = 쌓이는 상한 + warehouse_cap_min_per_level분 × 레벨, 금광 = 분당 골드 floor(goldmine_gold_base × 레벨^goldmine_gold_exp),
 // 대장간 = 장비 던전 한 번에 추가 드롭 확률 forge_extra_drop_pct_per_level% × 레벨, 길드 회관 = 건설·연구 시작 때 도움 (base + per_level × (레벨 − 1))회,
-// 한 번에 max(guild_help_min_sec초, 남은 시간 × guild_help_pct%)씩(길드에 들어 있을 때만). 짓지 않았으면(레벨 0) 효과 없음.
+// 한 번에 max(guild_help_min_sec초, 남은 시간 × guild_help_pct%)씩(길드에 들어 있을 때만). 지금은 pct 0·1200초 = 도움 1회 20분 고정(사용자 2026-11-07). 짓지 않았으면(레벨 0) 효과 없음.
 export const accumCapMin = (config: Config, warehouseLevel: number) =>
   cfgNum(config, 'accum_cap_min') + (config.warehouse_cap_min_per_level === undefined ? 0 : cfgNum(config, 'warehouse_cap_min_per_level') * Math.max(0, warehouseLevel))
 export const goldminePerMin = (config: Config, level: number) =>

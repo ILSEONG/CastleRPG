@@ -20,7 +20,7 @@ const levels = (token: string, lv: Record<string, number>) =>
   S.req('POST', '/v1/test/levels', { token, body: { levels: lv, res: { wood: 100000000, stone: 100000000, food: 100000000 } } })
 const done = (token: string) => S.req('POST', '/v1/test/build_now', { token })
 const CFG = { res_copy_tiers: '1:1|5:2|10:3|15:4', accum_cap_min: '720', warehouse_cap_min_per_level: '60', goldmine_gold_base: '20', goldmine_gold_exp: '1.5',
-  forge_extra_drop_pct_per_level: '2', guild_hall_helps_base: '2', guild_hall_helps_per_level: '1', guild_help_pct: '1', guild_help_min_sec: '60' }
+  forge_extra_drop_pct_per_level: '2', guild_hall_helps_base: '2', guild_hall_helps_per_level: '1', guild_help_pct: '0', guild_help_min_sec: '1200' }
 
 test('규칙: 키 = 종류#n, 성채 레벨별 채 수, 해금 레벨, 효과 식', () => {
   assert.deepEqual([R.typeOf('lumber#3'), R.typeOf('keep'), R.copyIndex('lumber#3'), R.copyIndex('lumber')], ['lumber', 'keep', 3, 1])
@@ -32,8 +32,10 @@ test('규칙: 키 = 종류#n, 성채 레벨별 채 수, 해금 레벨, 효과 �
   assert.deepEqual([0, 1, 4, 30].map((l) => R.goldminePerMin(CFG, l)), [0, 20, 160, 3286])
   assert.equal(R.forgeExtraP(CFG, 5), 0.1)
   assert.deepEqual([0, 1, 10].map((l) => R.guildHelps(CFG, l)), [0, 2, 11])
-  assert.equal(R.afterHelps(1000, 2, CFG), 880) // 60초씩(1%보다 크다)
-  assert.equal(R.afterHelps(100000, 1, CFG), 99000) // 1%
+  assert.equal(R.afterHelps(100000, 1, CFG), 98800) // 도움 1회 = 20분 고정(사용자 2026-11-07)
+  assert.equal(R.afterHelps(56220, 2, CFG), 53820)
+  assert.equal(R.afterHelps(1000, 2, CFG), 0) // 0 아래로는 안 간다
+  assert.equal(R.afterHelps(100000, 1, { ...CFG, guild_help_pct: '1', guild_help_min_sec: '60' }), 99000) // 식은 그대로: max(최소 초, 남은 × pct%)
 })
 
 test('n번째 채·새 건물: 처음엔 공터, 성채 레벨 전엔 keep_cap, 기본 자리가 없으니 no_cell, 자리를 고르면 짓고 다 지으면 Lv 1', async () => {
@@ -115,7 +117,7 @@ test('길드 회관: 길드에 들어 있으면 건설 시간이 도움 수만�
   const [g] = await S.db.query("insert into guilds (name, emblem, seed, created_at, virtual_n) values ('회관 시험', 1, 9, now(), 0) returning id::text as id")
   await S.db.query('insert into player_guild (player_id, guild_id) values ($1, $2) on conflict (player_id) do update set guild_id = $2', [id, g.id])
   r = await build(token, 'keep')
-  assert.equal(r.json.build.finish, S.clock.t + R.afterHelps(56220, 2, CFG)) // 회관 Lv 1: 도움 2번
+  assert.equal(r.json.build.finish, S.clock.t + 56220 - 2 * 1200) // 회관 Lv 1: 도움 2번 × 20분
 })
 
 test('기존 게스트가 다시 로그인해도 새 건물은 공터(공짜 Lv 1로 생기지 않는다)', async () => {

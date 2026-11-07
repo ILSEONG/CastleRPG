@@ -104,7 +104,7 @@ building_panel.desc.farm,식량을 생산합니다.,,,,scripts/building_panel.gd
 building_panel.desc.warehouse,자원과 골드가 쌓이는 최대 시간이 늘어납니다.,,,,scripts/building_panel.gd
 building_panel.desc.goldmine,골드를 생산합니다. 눌러서 받으세요.,,,,scripts/building_panel.gd
 building_panel.desc.forge,장비 던전에서 일정 확률로 장비가 하나 더 나옵니다.,,,,scripts/building_panel.gd
-building_panel.desc.guild_hall,길드에 가입하면 길드원의 도움으로 건설·연구 시간이 줄어듭니다.,,,,scripts/building_panel.gd
+building_panel.desc.guild_hall,길드에 가입하면 길드원의 도움으로 건설·연구 시간이 줄어듭니다. 도움 1회마다 20분씩 줄어듭니다.,,,,scripts/building_panel.gd
 building_panel.desc.watchtower,전투 중 성 밖 몬스터에게 화살을 쏩니다.,,,,scripts/building_panel.gd
 building_panel.desc.dispatch,영웅을 의뢰에 파견해 보상을 얻습니다. 레벨이 오르면 일일 의뢰 수와 희귀 의뢰 확률이 늘고 파견 시간이 줄어듭니다.,,,,scripts/building_panel.gd
 building_panel.ready,선행 조건,,,,scripts/building_panel.gd

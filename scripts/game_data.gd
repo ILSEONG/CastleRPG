@@ -401,7 +401,7 @@ static func guild_helps(level: int) -> int:
 	return 0 if level <= 0 else floori(config_num("guild_hall_helps_base") + config_num("guild_hall_helps_per_level") * (level - 1))
 
 
-## 도움 helps회를 받은 뒤 남은 초(서버 rules.afterHelps): 한 번에 max(guild_help_min_sec, 남은 × guild_help_pct%)씩, 0 아래로는 안 간다.
+## 도움 helps회를 받은 뒤 남은 초(서버 rules.afterHelps): 한 번에 max(guild_help_min_sec, 남은 × guild_help_pct%)씩, 0 아래로는 안 간다. 지금은 pct 0·1200초 = 1회 20분 고정(2026-11-07).
 static func after_helps(sec: float, helps: int) -> int:
 	var left := sec
 	for i in helps:
