@@ -1752,9 +1752,10 @@ func test_deploy_and_promotion() -> void:
 	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 3, 10, 25, 40, 70, 0, 0] and GameData.MAX_PROMOTION == 5,
 		"promotion cost p -> p+1 = 3|10|25|40|70 shards (2026-11-03); none at the max (5)")
 	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [50, 100, 150, 200, 250, 300], "max level = hero_max_levels by promotion: 50 / 100 / 150 / 200 / 250 / 300 (2026-11-03)")
-	check(GameData.levelup_cost("SSR", 1).gold == 240 and GameData.levelup_cost("SSR", 20).gold == 8064 and GameData.levelup_cost("SSR", 50).gold == 328031
-		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.037, 198) * exp(8.2 * (1.0 - exp(-198.0 / 45.0)))) and absi(GameData.levelup_cost("SSR", 1, 199).gold - 26_400_000_000) < 200_000_000,
-		"level-up gold = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))): SSR Lv 20 8,064, Lv 50 32.8만, 1 -> 200 about 264억: %s" % [GameData.levelup_cost("SSR", 1, 199)])
+	check(GameData.levelup_cost("SSR", 1).gold == 240 and GameData.levelup_cost("SSR", 20).gold == 8064 and GameData.levelup_cost("SSR", 50).gold == 49552
+		and GameData.levelup_cost("SSR", 50).gold == roundi(GameData.levelup_cap(240.0, 50)) and GameData.levelup_cost("SSR", 50).gold < roundi(240.0 * pow(1.037, 49) * exp(8.2 * (1.0 - exp(-49.0 / 45.0))))
+		and GameData.levelup_cost("SSR", 1, 199).gold == 25_334_792 and GameData.levelup_cost("SSR", 1, 299).gold == 104_177_740,
+		"level-up gold = min(round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))), 10 min of kill gold at the round that level is needed) (2026-11-07): SSR Lv 20 8,064, Lv 50 4.96만 (cap), 1 -> 300 about 1.04억: %s" % [GameData.levelup_cost("SSR", 1, 299)])
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
 	gs.keep_level = 9
@@ -2048,7 +2049,7 @@ func test_hero_levels() -> void:
 		"power: same grade, level and promotion differ by at most 10 (R/SR/SSR/UR, Lv 1-200, promotion 0-5); level and promotion raise it; a higher grade beats a lower one: spreads %s" % [spreads])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [60, 75, 92, 114, 139, 368, 1723, 2016] and gold.call("SR", [1, 2, 3, 10, 19]) == [120, 149, 184, 736, 3446] \
-		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 298, 369, 1471, 6891, 1692572], "gold cost table = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))), same as the server")
+		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 298, 369, 1471, 6891, 57298], "gold cost table = min(curve, 10-minute cap), same as the server")
 	check(GameData.levelup_cost("R", 1, 5) == {"gold": 480} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 42122}, "cost is gold only (no food), count sums the levels")
 	# 오프라인 레벨업
 	var e = _econ(1000.0)

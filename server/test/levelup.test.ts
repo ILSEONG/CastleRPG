@@ -26,13 +26,15 @@ const setHero = (id: string, hero: string, promotion: number, level: number) =>
 const levelup = (token: string, body: unknown) => S.req('POST', '/v1/hero/levelup', { token, body })
 const logs = async (id: string) => S.db.query("select detail from economy_log where player_id = $1 and kind = 'levelup' order by id", [id])
 
-test('비용 표: 골드 = round(등급 값 × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))), 식량 없음. count는 합계. 최대 레벨: 목록이 있으면 그 값, 없으면 20 + 10 × 승급', () => {
+test('비용 표: 골드 = min(round(등급 값 × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))), 10분 상한), 식량 없음. count는 합계. 최대 레벨: 목록이 있으면 그 값, 없으면 20 + 10 × 승급', () => {
   const one = (g: string, l: number) => R.levelupCost(g, l, 1, CFG)
   assert.deepEqual([1, 2, 3, 4, 5, 10, 19, 20].map((l) => one('R', l).gold), [30, 37, 46, 57, 70, 184, 861, 1008])
   assert.deepEqual([1, 2, 3, 10, 19].map((l) => one('SR', l).gold), [60, 75, 92, 368, 1723])
-  assert.deepEqual([1, 2, 3, 10, 19, 69].map((l) => one('SSR', l).gold), [120, 149, 184, 736, 3446, 846286])
+  assert.deepEqual([1, 2, 3, 10, 19, 69].map((l) => one('SSR', l).gold), [120, 149, 184, 736, 3446, 28649])
   assert.deepEqual(R.levelupCost('R', 1, 5, CFG), { gold: 30 + 37 + 46 + 57 + 70 })
   assert.deepEqual(R.levelupCost('SSR', 1, 19, CFG), { gold: 21060 })
+  // 2026-11-07 10분 상한: 앱 run_tests와 같은 합계(SSR 값 240, 1 → 300)
+  assert.deepEqual(R.levelupCost('SSR', 1, 299, { ...CFG, levelup_gold_SSR: '240' }), { gold: 104177740 })
   assert.deepEqual([0, 1, 2, 5].map((p) => R.heroMaxLevel(p, CFG)), [20, 30, 40, 70])
   assert.deepEqual([0, 1, 2, 5].map((p) => R.heroMaxLevel(p, { ...CFG, hero_max_levels: '20|50|80|120|160|200' })), [20, 50, 80, 200])
 })

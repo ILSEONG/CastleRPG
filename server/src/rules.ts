@@ -594,9 +594,27 @@ export function levelupCost(grade: string, level: number, count: number, config:
   const g = cfgNum(config, `levelup_gold_${grade}`)
   let gold = 0
   for (let l = level; l < level + count; l++) {
-    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** (l - 1) * Math.exp(LEVELUP_GOLD_BOOST * (1 - Math.exp(-(l - 1) / LEVELUP_GOLD_TAU))))
+    gold += roundHalfAway(Math.min(g * LEVELUP_GOLD_GROWTH ** (l - 1) * Math.exp(LEVELUP_GOLD_BOOST * (1 - Math.exp(-(l - 1) / LEVELUP_GOLD_TAU))), levelupCap(g, l)))
   }
   return { gold }
+}
+
+// 레벨업 1회 상한(2026-11-07 사용자: 영웅 1명 1레벨 = 그 레벨이 필요한 라운드 10분 처치 골드). 앱 GameData.levelup_cap과 같다.
+// 상한 = 등급 값 × (3880 / 240) × 처치 골드 배율(그 라운드). 3880 = 8라운드(10분) × 라운드 골드 485(72마리 × 5 + 보스 125).
+// 라운드 = LEVELUP_CAP_ROUNDS(레벨 → 그 레벨이 있어야 깨는 라운드, SSR 4명 시뮬레이션) 사이 직선.
+export const LEVELUP_CAP_PER_BASE = 3880 / 240
+export const LEVELUP_CAP_ROUNDS: [number, number][] = [[1, 10], [13, 20], [30, 30], [51, 40], [95, 50], [101, 60], [111, 75], [151, 100], [201, 125], [234, 150], [281, 200], [300, 230]]
+export function levelupCap(base: number, level: number): number {
+  let r = LEVELUP_CAP_ROUNDS[LEVELUP_CAP_ROUNDS.length - 1][1]
+  for (let i = 1; i < LEVELUP_CAP_ROUNDS.length; i++) {
+    const [la, ra] = LEVELUP_CAP_ROUNDS[i - 1]
+    const [lb, rb] = LEVELUP_CAP_ROUNDS[i]
+    if (level <= lb) {
+      r = ra + (rb - ra) * (Math.max(level, la) - la) / (lb - la)
+      break
+    }
+  }
+  return base * LEVELUP_CAP_PER_BASE * (1 + GOLD_LINEAR * (r - 1)) * GOLD_GROWTH ** (r - 1)
 }
 
 // 상한을 넘는 처치는 버린다 — 싼 몬스터부터 인정하고 비싼 몬스터를 먼저 버린다(부풀린 보스 처치가 먼저 잘린다).

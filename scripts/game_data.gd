@@ -716,8 +716,24 @@ static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	var g := config_num("levelup_gold_" + grade)
 	var gold := 0
 	for l in range(level, level + count):
-		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, l - 1) * exp(LEVELUP_GOLD_BOOST * (1.0 - exp(-(l - 1) / LEVELUP_GOLD_TAU))))
+		gold += roundi(minf(g * pow(LEVELUP_GOLD_GROWTH, l - 1) * exp(LEVELUP_GOLD_BOOST * (1.0 - exp(-(l - 1) / LEVELUP_GOLD_TAU))), levelup_cap(g, l)))
 	return {"gold": gold}
+
+
+## 레벨업 1회 상한(2026-11-07 사용자: 영웅 1명 1레벨 = 그 레벨이 필요한 라운드 10분 처치 골드). 서버 rules.levelupCap과 같은 식.
+## 상한 = 등급 값 × LEVELUP_CAP_PER_BASE × 처치 골드 배율(그 라운드). LEVELUP_CAP_PER_BASE = 10분(8라운드 × 75초) × 라운드 골드(72마리 × 5 + 보스 125 = 485) ÷ SSR 등급 값 240.
+## 라운드 = LEVELUP_CAP_ROUNDS(레벨 → 그 레벨이 있어야 깨는 라운드, SSR 4명·장비·병사 없음 시뮬레이션 2026-11-06·07) 사이 직선.
+const LEVELUP_CAP_PER_BASE := 3880.0 / 240.0
+const LEVELUP_CAP_ROUNDS := [[1, 10], [13, 20], [30, 30], [51, 40], [95, 50], [101, 60], [111, 75], [151, 100], [201, 125], [234, 150], [281, 200], [300, 230]]
+static func levelup_cap(base: float, level: int) -> float:
+	var r := float(LEVELUP_CAP_ROUNDS[-1][1])
+	for i in range(1, LEVELUP_CAP_ROUNDS.size()):
+		var a: Array = LEVELUP_CAP_ROUNDS[i - 1]
+		var b: Array = LEVELUP_CAP_ROUNDS[i]
+		if level <= int(b[0]):
+			r = float(a[1]) + float(b[1] - a[1]) * float(maxi(level, int(a[0])) - int(a[0])) / float(int(b[0]) - int(a[0]))
+			break
+	return base * LEVELUP_CAP_PER_BASE * (1.0 + GOLD_LINEAR * (r - 1.0)) * pow(GOLD_GROWTH, r - 1.0)
 
 
 # --- 공용 업그레이드(개정 20 §2·§3). 서버 rules.upgradeCost와 같은 식 ---
