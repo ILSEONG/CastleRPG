@@ -856,7 +856,7 @@ export function createApp(opts: AppOptions) {
         diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
         gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
         research: { levels, current: p.research_cur },
-        quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n, rep: repeatView(p, game, now) }, // 튜토리얼·반복 퀘스트 진행
+        quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, tut_id: p.quest.tut_state === 'active' ? game.quests.filter((d) => d.type === 'tutorial')[p.quest.tut_step]?.id ?? '' : '', rep_n: p.quest.rep_n, rep: repeatView(p, game, now) }, // 튜토리얼·반복 퀘스트 진행
         layout: p.layout, // 자유 건설: 건물 → [x, y](고른 것만)
         dia_tickets: p.dia_tickets,
         ...(p.dia_debt > 0 ? { dia_debt: p.dia_debt } : {}), // 환불로 갚을 다이아(있을 때만)
@@ -2207,6 +2207,9 @@ export function createApp(opts: AppOptions) {
         if (q.tut_state !== 'active' || !rows.length) throw new ApiError(409, 'no_tutorial', 'the tutorial is not running')
         if (num !== q.tut_step || num >= rows.length) throw new ApiError(409, 'stale', `tutorial step is ${q.tut_step}`)
         const def = rows[num]
+        // 앱이 보낸 퀘스트 id가 서버 표의 그 번호와 다르면(가이드 순서가 바뀐 뒤의 옛 앱 — 2026-11-07 25번에 닉네임 퀘스트가 끼어
+        // 옛 앱이 26번을 「일일 미션」으로 보였다) 받지 않고 업데이트를 안내한다. id를 안 보내는 더 옛 앱은 예전대로.
+        if (typeof b.id === 'string' && b.id !== '' && b.id !== def.id) throw new ApiError(409, 'guide_changed', `tutorial step ${num} is '${def.id}', not '${b.id}'`)
         const need = R.parseNeeds(def.needs)
         if (need && need.buildings.some((b) => p.unbuilt.includes(b) || level(p, b) < need.level)) {
           throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)

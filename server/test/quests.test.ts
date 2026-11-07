@@ -37,7 +37,7 @@ test('새 플레이어: 튜토리얼 active, 성채·성문 밖 건물은 공터
   S.clock.t = T0
   const { token } = await S.login()
   const p = await player(token)
-  assert.deepEqual(p.quest, { tut_state: 'active', tut_step: 0, rep_n: 0, rep: null }) // 가이드 중엔 반복 퀘스트 진행이 없다
+  assert.deepEqual(p.quest, { tut_state: 'active', tut_step: 0, tut_id: 'stage_1_1', rep_n: 0, rep: null }) // 가이드 중엔 반복 퀘스트 진행이 없다
   assert.equal(p.dia_tickets, 0)
   assert.deepEqual(p.unbuilt, ['archery', 'barracks', 'farm', 'houses', 'lab', 'lumber', 'quarry', 'stable', 'tavern', ...LOTS].sort())
   assert.equal(p.buildings.lumber.level, 1)
@@ -279,10 +279,13 @@ test('가이드 퀘스트: 받은 뒤부터 센다(c.gq), 던전 종류, 서버�
   const nk = rows.findIndex((x) => x.id === 'nickname')
   assert.ok(nk > 0)
   await startAt(nk)
+  // 가이드 순서가 바뀐 뒤의 옛 앱(2026-11-07): 보낸 id가 그 번호의 퀘스트가 아니면 guide_changed, 화면 정보에 tut_id
+  assert.equal((await player(token)).quest.tut_id, 'nickname')
+  assert.equal((await claim(token, { type: 'tutorial', step: nk, id: 'mission_claim' })).json.error, 'guide_changed')
   await S.db.query('update players set nickname_changes = 0 where id = $1', [id])
   assert.equal((await tryClaim(nk)).json.error, 'not_done')
   await S.db.query('update players set nickname_changes = 1 where id = $1', [id])
-  assert.equal((await tryClaim(nk)).status, 200)
+  assert.equal((await claim(token, { type: 'tutorial', step: nk, id: 'nickname' })).status, 200)
   // 이 기능 전에 시작한 퀘스트(c.gq 번호가 다름): 예전처럼 누적 — 진행 중인 성주가 막히지 않는다
   const k2 = rows.findIndex((x) => x.id === 'kill_30_3')
   await at(k2)

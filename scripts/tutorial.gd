@@ -514,6 +514,10 @@ func _server_behind() -> bool:
 
 
 ## 서버 퀘스트 진행을 받아 맞춘다. 미션이 바뀌었으면 사건 수를 새로 센다. 튜토리얼이 막 끝났으면 알림.
+var guide_outdated := false  # 서버 가이드 표가 이 앱과 다르다(_sync_server — 앱 업데이트 필요)
+var _outdated_told := false
+
+
 func _sync_server() -> void:
 	var q: Dictionary = econ.server_quest if econ != null else {}
 	if q.is_empty():
@@ -526,6 +530,12 @@ func _sync_server() -> void:
 	var before := [state, step, rep_n]
 	state = str(q.tut_state)
 	step = clampi(int(q.tut_step), 0, MISSIONS.size())
+	# 서버 표의 지금 퀘스트(tut_id)가 이 앱의 그 번호와 다르다: 가이드 순서가 바뀐 뒤의 옛 앱(2026-11-07) — 한 번 알린다(받기는 서버가 guide_changed로 막는다)
+	var sid := str(q.get("tut_id", ""))
+	guide_outdated = state == "active" and sid != "" and step < MISSIONS.size() and str(MISSIONS[step].id) != sid
+	if guide_outdated and not _outdated_told and econ != null:
+		_outdated_told = true
+		econ.notice.emit(Lang.t("economy.quest_fail_text.guide_changed"))
 	if state == "active" and step >= MISSIONS.size():
 		state = "done"
 	if int(q.rep_n) != rep_n:
@@ -1159,7 +1169,7 @@ func claim() -> bool:
 		return false
 	var rep := repeating()
 	if online:  # 서버가 보상을 주고 진행을 올린다 — 응답 전에 여기서 먼저 넘긴다
-		if not econ.quest_claim_online({"type": "repeat", "n": rep_n} if rep else {"type": "tutorial", "step": step},
+		if not econ.quest_claim_online({"type": "repeat", "n": rep_n} if rep else {"type": "tutorial", "step": step, "id": str(MISSIONS[step].id)},
 				repeat_reward(rep_quest) if rep else reward(step)):  # 보상은 누르는 즉시 보이고 서버가 거절하면 되돌린다
 			return false
 		_claiming.append({"state": state, "step": step, "rep_n": rep_n, "rep_quest": rep_quest.duplicate(), "count": count})

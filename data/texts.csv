@@ -346,6 +346,7 @@ economy.no_dia_text,다이아가 부족합니다,,,,scripts/economy.gd
 economy.no_ticket_text,다이아 모집권이 부족합니다,,,,scripts/economy.gd
 economy.quest_fail_text.too_soon,잠시 후 다시 받아 주세요,,,,scripts/economy.gd
 economy.quest_fail_text.not_done,아직 완료하지 않은 미션입니다,,,,scripts/economy.gd
+economy.quest_fail_text.guide_changed,가이드 퀘스트가 새로 바뀌었습니다. 앱을 최신 버전으로 업데이트해 주세요,,,,scripts/economy.gd
 economy.quest_fail_text.stale,이미 받은 보상입니다,,,,scripts/economy.gd
 economy.quest_fail_default,보상을 받지 못했습니다. 잠시 후 다시 시도해 주세요,,,,scripts/economy.gd
 economy.gacha_level_text,골드 모집 Lv %d! SSR %s%%,,,,scripts/economy.gd

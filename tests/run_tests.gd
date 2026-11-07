@@ -5842,6 +5842,15 @@ func test_tutorial() -> void:
 	check(nick_wait and t.complete() and t.point_keys(t.mission()) == ["settings:rename", "menu:settings", "menu"] and t.reward(t.step).get("diamonds") == 500,
 		"guide: nickname quest waits for the first nickname change, points at settings [변경], pays 500 diamonds")
 	t.econ.nickname = nick_was
+	# 서버 가이드 표가 앱과 다르면(옛 앱 — 2026-11-07) 알린다: 서버 tut_id가 앱의 그 번호 퀘스트가 아니다
+	var sq_was = t.econ.server_quest
+	t.econ.server_quest = {"tut_state": "active", "tut_step": t.mission_index("nickname"), "tut_id": "atk_15", "rep_n": 0}
+	t._sync_server()
+	var outdated: bool = t.guide_outdated
+	t.econ.server_quest = {"tut_state": "active", "tut_step": t.mission_index("nickname"), "tut_id": "nickname", "rep_n": 0}
+	t._sync_server()
+	check(outdated and not t.guide_outdated, "guide: a server quest id that differs from this app's quest at that step marks the guide outdated")
+	t.econ.server_quest = sq_was
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30_10")
 	t.count = 0
@@ -6067,7 +6076,7 @@ func test_tutorial_online() -> void:
 	e.granted.connect(func(_r): sounds[0] += 1)
 	check(t.complete() and t.claim(), "online claim sent")
 	check(t.step == ki + 1 and t.count == 0 and t.mission().id == TutorialScript.MISSIONS[ki + 1].id and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
-		and cn.sent[0].body == {"type": "tutorial", "step": ki} and cn.sent[0].once and sounds[0] == 1,
+		and cn.sent[0].body == {"type": "tutorial", "step": ki, "id": str(TutorialScript.MISSIONS[ki].id)} and cn.sent[0].once and sounds[0] == 1,
 		"online claim: the next mission and the reward sound come at once, one request (step %d)" % t.step)
 	check([e.gold, e.diamonds, int(e.res.get("wood", 0))] == [w0[0] + int(r0.get("gold", 0)), w0[1] + int(r0.get("diamonds", 0)), w0[2] + int(r0.get("wood", 0))],
 		"online claim: the reward shows before the reply %s" % [r0])
@@ -6075,7 +6084,7 @@ func test_tutorial_online() -> void:
 	check(not t.claim_blocked(), "guide claims can follow before the reply")
 	var c2 := maxi(1, int(t.mission().get("arg", 1)))
 	t.count = c2
-	check(t.complete() and t.claim() and t.step == ki + 2 and cn.sent.size() == 2 and cn.sent[1].body == {"type": "tutorial", "step": ki + 1}, "the next guide claim goes before the first reply")
+	check(t.complete() and t.claim() and t.step == ki + 2 and cn.sent.size() == 2 and cn.sent[1].body == {"type": "tutorial", "step": ki + 1, "id": str(TutorialScript.MISSIONS[ki + 1].id)}, "the next guide claim goes before the first reply")
 	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
 	e.apply_server(reply)  # 처치 보내기 응답 등(서버는 아직 누르기 전 단계)
 	check(t.step == ki + 2, "an older server step doesn't pull the card back while claims are in flight")
