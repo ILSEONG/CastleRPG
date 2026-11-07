@@ -1,6 +1,6 @@
 extends "res://scripts/ops_sheet.gd"
 ## 우편함 창(2026-10-12, 오른쪽 아래 메뉴 [우편]). 운영자가 보낸 우편(점검 보상·문의 보상 등, LiveOps.mails — GET /v1/mail)을
-## 새것 순으로 보인다. 줄 = 제목·보낸 때·남은 기간, 본문, 보상 한 줄, [받기]. 위 [모두 받기]는 한 번에 전부.
+## 새것 순으로 보인다. 줄 = 제목·보낸 때·남은 기간, 본문, 보상 한 줄, [받기]. 오른쪽 아래 [모두 받기]는 한 번에 전부.
 ## 받기는 곧바로 반영된다(LiveOps.claim — 목록에서 빠지고 재화가 바로 오른다, 서버가 거절하면 되돌린다).
 
 var claim_all: Button
@@ -21,8 +21,7 @@ func _ready() -> void:
 	claim_all.pressed.connect(func(): LiveOps.claim())
 	row.add_child(claim_all)
 	buttons["claim_all"] = claim_all
-	content.add_child(row)
-	content.move_child(row, 1)
+	content.add_child(row)  # 목록 아래 줄: 왼쪽 개수, 오른쪽 아래 [모두 받기]
 	LiveOps.changed.connect(func():
 		if visible:
 			_rebuild())

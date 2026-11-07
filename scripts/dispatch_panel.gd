@@ -51,6 +51,7 @@ var title_label: Label
 var info_label: Label
 var odds_label: Label
 var tools: HBoxContainer
+var foot: HBoxContainer  # 아래 줄: 오른쪽 [모두 받기](우편·미션 창과 같은 자리)
 var body: VBoxContainer
 var scroll: ScrollContainer
 var _time_labels := {}  # 의뢰 id → 남은 시간 Label
@@ -92,6 +93,9 @@ func _ready() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 8)
 	scroll.add_child(body)
+	foot = HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 8)
+	content.add_child(foot)
 	_fit_sheet()
 	if PortraitsScript.current != null:
 		PortraitsScript.current.portrait_ready.connect(func(_k): _redraw_faces())
@@ -432,6 +436,8 @@ func _rebuild() -> void:
 	_seen_done.clear()
 	for c in tools.get_children():
 		c.queue_free()
+	for c in foot.get_children():
+		c.queue_free()
 	for c in body.get_children():
 		c.queue_free()
 	title_label.text = TITLE if level() <= 0 else "%s Lv %d" % [TITLE, level()]
@@ -463,10 +469,13 @@ func _rebuild() -> void:
 	tools.add_child(all)
 	buttons["send_all"] = all
 	var get_all := _button(Lang.t("dispatch_panel.rebuild_5"), GO, 22)
-	get_all.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	get_all.custom_minimum_size = Vector2(180, 54)
 	get_all.disabled = not list().any(func(j): return is_done(j, now))
 	get_all.pressed.connect(claim_all)
-	tools.add_child(get_all)
+	var gap := Control.new()  # 버튼을 오른쪽 아래로
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	foot.add_child(gap)
+	foot.add_child(get_all)
 	buttons["claim_all"] = get_all
 	if list().is_empty():
 		body.add_child(_label(Lang.t("dispatch_panel.rebuild_6"), 24, SUB))

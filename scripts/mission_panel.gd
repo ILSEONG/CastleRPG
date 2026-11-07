@@ -78,19 +78,9 @@ func _ready() -> void:
 		tabs.add_child(b)
 		buttons["tab:" + t[0]] = b
 	content.add_child(tabs)
-	var head_row := HBoxContainer.new()  # 초기화 시각 + 오른쪽 [모두 받기]
-	head_row.add_theme_constant_override("separation", 8)
-	head_label = _label("", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
-	head_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head_label = _label("", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)  # 초기화 시각
 	head_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	head_row.add_child(head_label)
-	all_button = _button(Lang.t("mission_panel.ready_2"), UiKit.AMBER, 22)
-	all_button.focus_mode = Control.FOCUS_NONE
-	all_button.custom_minimum_size = Vector2(150, 52)
-	all_button.pressed.connect(func(): Missions.claim_all(tab))  # 곧바로 반영(서버 확인은 뒤에서). 받을 게 없으면 아무 일도 없다
-	head_row.add_child(all_button)
-	buttons["all"] = all_button
-	content.add_child(head_row)
+	content.add_child(head_label)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -99,6 +89,18 @@ func _ready() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 8)
 	scroll.add_child(body)
+	var foot := HBoxContainer.new()  # 아래 줄: 오른쪽 [모두 받기]
+	foot.add_theme_constant_override("separation", 8)
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	foot.add_child(gap)
+	all_button = _button(Lang.t("mission_panel.ready_2"), UiKit.AMBER, 22)
+	all_button.focus_mode = Control.FOCUS_NONE
+	all_button.custom_minimum_size = Vector2(180, 54)
+	all_button.pressed.connect(func(): Missions.claim_all(tab))  # 곧바로 반영(서버 확인은 뒤에서). 받을 게 없으면 아무 일도 없다
+	foot.add_child(all_button)
+	buttons["all"] = all_button
+	content.add_child(foot)
 	_fit_sheet()
 	Missions.changed.connect(func(): _dirty = true)
 
