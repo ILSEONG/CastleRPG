@@ -44,9 +44,11 @@ func _ready() -> void:
 	_b_token = str(g.get("token", ""))
 	await _http("POST", "/v1/test/grant_hero", {"hero_id": "hans"}, _b_token)
 	_check(_b_token != "", "second lord B signed in", g)
+	await _recruit_flow()
 
 	var tabs = _find("res://scripts/tab_bar.gd")
-	tabs.press("dungeon")
+	if not tabs.windows.dungeon.is_open():
+		tabs.press("dungeon")
 	var panel = tabs.windows.dungeon
 	panel.set_section("party")
 	await _frames(10)
@@ -78,7 +80,12 @@ func _ready() -> void:
 	view.buttons["start:lich"].pressed.emit()
 	_check(Party.state() == "queued", "leader start: queued at once", Party.queue())
 	await _wait_until(func(): return not Party._busy, 10.0)
-	var bq = await _http("GET", "/v1/party", null, _b_token)
+	var bq := {}
+	for i in 20:  # 방장 [매칭 시작]은 앱 값을 먼저 바꾸고 서버에 보낸다 — 서버가 받을 때까지
+		bq = await _http("GET", "/v1/party", null, _b_token)
+		if str(bq.get("party", {}).get("queue", {}).get("state", "")) == "queued":
+			break
+		await get_tree().create_timer(0.25).timeout
 	_check(str(bq.get("party", {}).get("queue", {}).get("state", "")) == "queued", "B is queued with the party", bq.get("party", {}).get("queue"))
 	await _request("/v1/test/party_bots_now", {})
 	_check(await _wait_until(func(): return Party.state() == "confirm", 10.0), "A gets the accept window", Party.queue())
@@ -99,6 +106,16 @@ func _ready() -> void:
 		await get_tree().create_timer(0.5, true, false, true).timeout
 		b.hud._on_leave()
 		await _frames(20)
+		if is_instance_valid(b) and b.phase == b.Phase.RESULT:  # 포기 → 결과 화면 → [나가기]
+			b.hud._on_leave()
+		await _wait_until(func(): return _battle() == null, 10.0)
+	# B도 판을 끝낸다(남은 사람이 있으면 A는 그 판이 끝날 때까지 매칭·파티가 막힌다 — 2026-11-07 탈주 규칙)
+	var bl = await _http("GET", "/v1/party", null, _b_token)
+	var brun := str(bl.get("party", {}).get("queue", {}).get("run_id", ""))
+	if brun != "":
+		await _http("POST", "/v1/party/finish", {"run_id": brun, "win": false, "elapsed": 5}, _b_token)
+	Party.fetch()
+	await _wait_until(func(): return Party.state() == "idle" and Party.block_left() <= 0, 10.0)
 	await _invite_flow()
 	_finish()
 
@@ -135,6 +152,65 @@ func _invite_flow() -> void:
 	_check(bb != null and bb.disabled and bb.text == "파티원", "B shows as a party member (not invitable)", bb.text if bb else "")
 	await _snap("7_invite_list")
 	view.invite_panel.close()
+
+
+## 파티원 모집(2026-11-07): A [파티원 모집] → 파티가 생기고 전체 채팅에 초대장 → B가 채팅에서 초대장을 보고 그 코드로 참가.
+## 반대로 B가 모집 → A 채팅 창 초대장 줄 [참가] → A가 B의 파티에, 던전 창 [파티] 탭이 열린다.
+func _recruit_flow() -> void:
+	Party.leave_lobby()
+	await _http("POST", "/v1/party/lobby/leave", {}, _b_token)
+	await _frames(10)
+	var tabs = _find("res://scripts/tab_bar.gd")
+	var dg = tabs.windows.dungeon
+	if not dg.is_open():
+		tabs.press("dungeon")
+	dg.set_section("party")
+	await _frames(10)
+	var view = dg.party_tab
+	view.refresh()
+	_check(not view.buttons["recruit:lich"].disabled, "[파티원 모집] is ready with no party", "")
+	view.buttons["recruit:lich"].pressed.emit()
+	_check(await _wait_until(func(): return str(Party.lobby().get("code", "")) != "", 10.0), "[파티원 모집] made a party", Party.lobby())
+	var code := str(Party.lobby().get("code", ""))
+	_check(await _wait_until(func(): return Chat.messages.all.any(func(m): return m.get("party") is Dictionary and str(m.party.code) == code), 10.0),
+		"the invite card is in my chat at once", Chat.messages.all.slice(-2))
+	await _frames(10)
+	await _snap("8_recruit_button")
+	var bc = await _http("GET", "/v1/chat", null, _b_token)
+	var card := {}
+	for m in bc.get("all", []):
+		if m.get("party") is Dictionary and str(m.party.code) == code:
+			card = m.party
+	_check(card.get("open", false) == true and int(card.get("count", 0)) == 1, "B sees the open invite card in chat", card)
+	var j = await _http("POST", "/v1/party/lobby/join", {"code": code, "hero": {"id": "hans", "hp": 500, "atk": 40}}, _b_token)
+	_check(j.get("party", {}).get("lobby", {}).get("members", []).size() == 2, "B joined from the card", j)
+	_check(await _wait_until(func(): return Party.lobby().get("members", []).size() == 2, 10.0), "A sees B in the party", Party.lobby())
+	# B가 모집 → A가 채팅 줄 [참가]
+	Party.leave_lobby()
+	await _wait_until(func(): return not Party.in_lobby(), 5.0)
+	await _http("POST", "/v1/party/lobby/leave", {}, _b_token)
+	var r = await _http("POST", "/v1/party/recruit", {"quest": "lich", "diff": 1, "hero": {"id": "hans", "hp": 500, "atk": 40}}, _b_token)
+	var mid := int(r.get("msg", {}).get("id", 0))
+	_check(mid > 0, "B posted an invite card", r)
+	var cp = _find("res://scripts/chat_panel.gd")
+	tabs.press("dungeon")  # 던전 창을 닫는다
+	await _frames(5)
+	cp.open()
+	Chat.poll()
+	_check(await _wait_until(func(): return cp.buttons.has("party_join:%d" % mid) and is_instance_valid(cp.buttons["party_join:%d" % mid]), 15.0), "A's chat shows B's card with [참가]", Chat.messages.all.slice(-2))
+	await _frames(10)
+	await _snap("9_chat_card")
+	var jb: Button = cp.buttons["party_join:%d" % mid]
+	_check(jb.text == "참가" and not jb.disabled, "the card button reads 참가", jb.text)
+	jb.pressed.emit()
+	_check(await _wait_until(func(): return Party.lobby().get("members", []).size() == 2 and str(Party.lobby().get("code", "")) == str(r.get("party", {}).get("lobby", {}).get("code", "")), 10.0),
+		"[참가] put A in B's party", Party.lobby())
+	await _frames(15)
+	_check(dg.is_open() and dg.section == "party" and not cp.is_open(), "the dungeon [파티] tab opens and chat closes", [dg.is_open(), dg.section, cp.is_open()])
+	await _snap("10_joined")
+	Party.leave_lobby()
+	await _http("POST", "/v1/party/lobby/leave", {}, _b_token)
+	await _frames(10)
 
 
 func _battle():

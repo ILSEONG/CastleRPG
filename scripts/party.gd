@@ -25,13 +25,15 @@ static var ERROR_TEXT := {"locked": Lang.t("party.error_text.locked"), "bag_full
 	"not_friend": Lang.t("party.error_text.not_friend"), "offline": Lang.t("party.error_text.offline"), "member": Lang.t("party.error_text.member"),
 	"guide_locked": Lang.t("party.error_text.guide_locked"), "their_locked": Lang.t("party.error_text.their_locked"),
 	"match_running": Lang.t("party.error_text.match_running"), "leave_penalty": Lang.t("party.error_text.leave_penalty"),
-	"member_running": Lang.t("party.error_text.member_running"), "member_penalty": Lang.t("party.error_text.member_penalty")}
+	"member_running": Lang.t("party.error_text.member_running"), "member_penalty": Lang.t("party.error_text.member_penalty"),
+	"recruit_full": Lang.t("party.error_text.recruit_full"), "recruit_wait": Lang.t("party.error_text.recruit_wait"), "muted": Lang.t("party.error_text.muted")}
 const BLOCK_POLL_SEC := 5.0  # 나간 판이 끝나기를 기다리는 동안 묻는 간격(남은 성주들이 먼저 끝내면 곧바로 풀린다)
 static var FAIL_TEXT := Lang.t("party.fail_text")
 
 signal changed
 signal battle_started(run: Dictionary)  # 서버 live 상태 {match_id, run_id, quest, diff, seed, elapsed, time_limit, boss, seats, me, online}
 signal result_ready(result: Dictionary)  # {win, rewards: {items}, no_reward}
+signal show_party  # 채팅 초대장으로 파티에 들어갔다 — 던전 창 [파티] 탭을 연다(main.gd)
 signal invites_changed  # 받은 파티 초대가 바뀌었다(party_overlay.gd가 수락·거절 창을 띄운다)
 
 var view := {}  # {quests: {lich|spider: {best, clears_left}}, queue: {state, …}}. 비면 아직 모름
@@ -241,7 +243,7 @@ func start_queue(q: String, diff: int, hero := "", soldiers := [], from_lobby :=
 		return false
 	_epoch += 1
 	remember(q, diff, hero, soldiers)
-	view.queue = {"state": "queued", "quest": q, "diff": diff, "waited": 0, "bot_in": int(PartyRules.BOT_WAIT_SEC), "since": _now()}
+	view.queue = {"state": "queued", "quest": q, "diff": diff, "waited": 0, "bots": _bots(), "bot_in": int(PartyRules.BOT_WAIT_SEC), "since": _now()}
 	changed.emit()
 	if not online():
 		_offline_t = OFFLINE_WAIT
@@ -264,7 +266,7 @@ func start_queue(q: String, diff: int, hero := "", soldiers := [], from_lobby :=
 
 # --- 파티 코드(사용자 2026-10-15 "파티코드 있어서 파티를 구성할수잇어") ---
 ## [파티 만들기] → 코드가 나오고, 다른 성주는 [코드로 참가]. 방장이 [매칭 시작]을 누르면 파티원이 함께 대기열에 들어가 같은 판에 앉는다
-## (빈자리는 무작위 매칭 → BOT_WAIT_SEC 뒤 AI 성주). view.lobby = {code, quest, diff, leader, size, members: [{name, me, leader, hero?, soldiers?}]} 또는 null.
+## (빈자리는 무작위 매칭 — 사람만. 모자라면 [파티원 모집]으로 채팅 초대장). view.lobby = {code, quest, diff, leader, size, members: [{name, me, leader, hero?, soldiers?}]} 또는 null.
 ## 버튼은 앱 값을 먼저 바꾸고(코드는 서버가 정하니 "······"로) 서버가 거절하면 되돌린다. 빠른 두 번 탭은 _lobby_busy로 한 번만.
 
 var _lobby_busy := false
@@ -360,6 +362,97 @@ func update_lobby_pick(hero := "", soldiers := []) -> void:
 	econ.net.send("POST", "/v1/party/lobby/join", body, func(d): _take(d), Callable(), true, false)
 
 
+## AI 성주가 빈자리를 채우는 대기인가(2026-11-07 사용자 "파티던전 AI 성주 채우지말고"): 오프라인 시험과 슈퍼관리자 시험 판만.
+func _bots() -> bool:
+	return not online() or bool(econ.get("admin")) if econ != null else true
+
+
+# --- 파티원 모집(2026-11-07 사용자 "파티원 모집 버튼을 만들어서 버튼을 누르면 채팅에 파티 초대장이 가게끔") ---
+## 메이플스토리 파티 모집·로스트아크 파티 찾기처럼 전체 채팅에 초대장(퀘스트·난이도·인원 + [참가])을 올린다.
+## 파티가 없으면 서버가 만들고(혼자 매칭 중이면 그 대기를 파티 대기로 바꾼다), 같은 파티는 RECRUIT_GAP_SEC에 한 번.
+## 받은 사람은 채팅 줄의 [참가] → join_lobby(코드). 결과 done(ok, 글).
+const RECRUIT_GAP_SEC := 30.0  # 서버 PQ.RECRUIT_GAP_SEC과 같다
+const RECRUIT_TTL_SEC := 600.0  # 서버 PQ.RECRUIT_TTL_SEC과 같다(초대장 [참가] 유효 시간)
+var _recruit_busy := false
+var _recruit_at := -1000.0
+
+
+## 지금 모집할 수 없는 까닭("" = 됨). q = 파티가 없을 때 만들 퀘스트.
+func recruit_block(q: String, diff: int, hero: String, soldiers: Array) -> String:
+	if not online():
+		return Lang.t("party.recruit_block")
+	var st := state()
+	if st == "confirm" or st == "live":
+		return ERROR_TEXT.in_match
+	var l := lobby()
+	if not l.is_empty():
+		if (l.get("members", []) as Array).size() >= int(l.get("size", 4)):
+			return ERROR_TEXT.recruit_full
+	elif st == "idle":
+		var why := queue_block(q, diff, hero, soldiers, true)
+		if why != "":
+			return why
+	return ""
+
+
+func recruit_left() -> int:
+	return maxi(0, ceili(RECRUIT_GAP_SEC - (_now() - _recruit_at)))
+
+
+func recruit(q: String, diff: int, hero := "", soldiers := [], done := Callable()) -> void:
+	var why := recruit_block(q, diff, hero, soldiers)
+	if why == "" and recruit_left() > 0:
+		why = ERROR_TEXT.recruit_wait
+	if why != "" or _recruit_busy:
+		if done.is_valid():
+			done.call(false, why)
+		return
+	var body := {}
+	if not in_lobby() and state() == "idle":
+		remember(q, diff, hero, soldiers)
+		body = _pick_body(q, hero, soldiers)
+		body.quest = q
+		body.diff = diff
+	_recruit_busy = true
+	_epoch += 1
+	econ.net.send("POST", "/v1/party/recruit", body, func(d):
+		_recruit_busy = false
+		_recruit_at = _now()
+		_take(d)
+		var msg = d.get("msg") if d is Dictionary else null
+		if msg is Dictionary and has_node("/root/Chat"):
+			get_node("/root/Chat").add_mine("all", msg)
+		if done.is_valid():
+			done.call(true, Lang.t("party.recruit")), func():
+		_recruit_busy = false
+		if econ.net.last_error == "recruit_wait":
+			_recruit_at = _now()
+		if done.is_valid():
+			done.call(false, ERROR_TEXT.get(econ.net.last_error, FAIL_TEXT)), true, true)
+
+
+## 채팅 초대장 [참가]: 코드로 들어간다(이미 그 파티면 그대로). 결과 done(ok, 글).
+func join_from_card(card: Dictionary, done := Callable()) -> void:
+	var code := str(card.get("code", ""))
+	if str(lobby().get("code", "")) == code and code != "":
+		if done.is_valid():
+			done.call(true, "")
+		return
+	if has_node("/root/Tutorial") and get_node("/root/Tutorial").party_locked():
+		if done.is_valid():
+			done.call(false, ERROR_TEXT.guide_locked)
+		return
+	if in_lobby() or state() != "idle":
+		if done.is_valid():
+			done.call(false, Lang.t("party.join_from_card"))
+		return
+	join_lobby(code, func(ok, text):
+		if ok:
+			show_party.emit()
+		if done.is_valid():
+			done.call(ok, text))
+
+
 ## [파티 나가기].
 func leave_lobby() -> void:
 	if not in_lobby():
@@ -388,7 +481,7 @@ func start_lobby(diff: int) -> String:
 	if not online():
 		var me: Dictionary = l.members[0]
 		return "" if start_queue(q, diff, str(me.get("hero", {}).get("hero", "")), Party.pick_soldiers() if q == "spider" else [], true) else Lang.t("party.queue_block_4")
-	view.queue = {"state": "queued", "quest": q, "diff": diff, "waited": 0, "bot_in": int(PartyRules.BOT_WAIT_SEC), "since": _now()}
+	view.queue = {"state": "queued", "quest": q, "diff": diff, "waited": 0, "bots": _bots(), "bot_in": int(PartyRules.BOT_WAIT_SEC), "since": _now()}
 	changed.emit()
 	econ.net.send("POST", "/v1/party/lobby/start", {"diff": diff}, func(d): _take(d), func():
 		view.queue = {"state": "idle"}

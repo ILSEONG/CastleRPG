@@ -1,6 +1,6 @@
 extends CanvasLayer
 ## 파티 퀘스트 매칭 표시(Party 오토로드가 붙인다 — 어느 화면에서든 보인다, 사용자 2026-10-15).
-## 대기 중: 화면 위 띠 "리치의 무덤 · 쉬움 매칭 중 0:12" + "n초 뒤 AI 성주가 빈자리를 채웁니다" + [취소].
+## 대기 중: 화면 위 띠 "리치의 무덤 · 쉬움 매칭 중 0:12" + "함께할 성주를 찾고 있습니다 …"(시험 판만 "n초 뒤 AI 성주가 …") + [취소].
 ## 자리가 차면: 입장 수락 창(양피지 두루마리) — 성주마다 이름·출전·수락 여부, 남은 초 막대, [입장 수락] [거절], [자동 수락] 체크.
 ##   모두 수락하면 전투가 열린다(Party.battle_started). 내가 수락했으면 버튼이 꺼지고 "다른 성주를 기다립니다".
 ## 받은 파티 초대(친구·길드원이 [초대]): 수락·거절 창 "○○님이 리치의 무덤 · 쉬움 파티에 초대했습니다" + 남은 초 + [거절] [수락].
@@ -275,8 +275,10 @@ func _tick_bar(q: Dictionary) -> void:
 	var t: String = Lang.t("party_overlay.process") % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1], UiKit.clock(waited)]
 	if bar_text.text != t:
 		bar_text.text = t
-	var bot_in := ceili(PartyRules.BOT_WAIT_SEC - waited)
-	var sub: String = Lang.t("party_overlay.process_2") % bot_in if bot_in > 0 else Lang.t("party_overlay.process_3")
+	var sub := Lang.t("party_overlay.tick_bar.sub")
+	if q.get("bots", false):  # 시험 판(오프라인·슈퍼관리자)만 AI 성주가 채운다 — 다른 판은 사람만(2026-11-07 사용자 "AI 성주 채우지말고")
+		var bot_in := ceili(PartyRules.BOT_WAIT_SEC - waited)
+		sub = Lang.t("party_overlay.process_2") % bot_in if bot_in > 0 else Lang.t("party_overlay.process_3")
 	if bar_sub.text != sub:
 		bar_sub.text = sub
 

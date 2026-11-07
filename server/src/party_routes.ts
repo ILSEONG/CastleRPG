@@ -20,6 +20,7 @@ import { capStats, fitHero, heroStats } from './guild_war.ts'
 import type { HeroDef } from './guild_war.ts'
 import type { PartyLive } from './party_live.ts'
 import { Limiter } from './ratelimit.ts'
+import { txt } from './texts.ts'
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 const PARTY_MISSION = 'party_clear' // 가이드 미션 id(data/quests.csv)
@@ -94,7 +95,11 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     hub.tick(x.now)
     hub.seen(x.id, x.now)
     const t = hub.ticketOf(x.id)
-    if (t) return { state: 'queued', quest: t.quest, diff: t.diff, waited: Math.floor(x.now - t.since), bot_in: Math.max(0, Math.ceil(PQ.BOT_WAIT_SEC - (x.now - t.since))) }
+    if (t) {  // bots = 시험 판(슈퍼관리자)만 빈자리를 AI 성주로 채운다 — 아니면 사람이 다 찰 때까지 기다린다(bot_in 0)
+      const bots = hub.queue.some((q) => (q === t || (t.seat.group && q.seat.group === t.seat.group)) && q.seat.bots)
+      return { state: 'queued', quest: t.quest, diff: t.diff, waited: Math.floor(x.now - t.since), bots,
+        bot_in: bots ? Math.max(0, Math.ceil(PQ.BOT_WAIT_SEC - (x.now - t.since))) : 0 }
+    }
     const m = hub.matchOf(x.id)
     if (!m) return { state: 'idle' }
     const seats = m.seats.map((s) => seatView(s, x.id))
@@ -203,7 +208,10 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     if (!x.pl.admin) return
     const t = hub.ticketOf(x.id)
     if (!t) return
-    for (const q of hub.queue) if (q === t || (t.seat.group && q.seat.group === t.seat.group)) q.since = x.now - PQ.BOT_WAIT_SEC
+    for (const q of hub.queue) if (q === t || (t.seat.group && q.seat.group === t.seat.group)) {
+      q.since = x.now - PQ.BOT_WAIT_SEC
+      q.seat.bots = true
+    }
     hub.tick(x.now)
   }
 
@@ -265,6 +273,11 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       throw lobbyFail('no_code')
     }
     if (joinTries.size > 10000) joinTries.clear()
+    if (hub.lobbyQueued(l) && !l.members.some((m) => m.seat.pid === x.id)) {  // 매칭 중인 파티에 들어가면 바로 같은 대기 — 그 난이도·매칭 제한을 여기서 본다
+      if (l.diff > (await stats(x))[l.quest].best + 1) throw blocked('locked', `difficulty ${l.diff} is locked`)
+      const blk = await blockOf(x.id, x.now)
+      if (blk) throw blockError(blk)
+    }
     const r = hub.joinLobby(code, await seatFor(x, l.quest, b), x.now)
     if (typeof r === 'string') throw lobbyFail(r)
     hub.invitesOf(x.id, x.now) // 이 파티로 온 초대는 여기서 지워진다
@@ -298,6 +311,50 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     if (typeof r === 'string') throw lobbyFail(r)
     botsNow(x)
     return c.json(await view(x))
+  })
+
+  // --- 파티원 모집(채팅 초대장) ---
+  //  POST /v1/party/recruit {quest?, diff?, hero?, soldiers?} 전체 채팅에 내 파티 초대장 → {server_now, party, msg}
+  //   파티가 없으면 먼저 만든다(혼자 매칭 중이면 그 대기를 파티 대기로 바꾼다, 아니면 보낸 quest·diff·출전으로 새 파티).
+  //   초대장 = 채팅 메시지(글은 옛 앱도 읽게 "[파티 모집] …") + party {code, quest, diff, count, size, open}. [참가] = POST /v1/party/lobby/join {code}
+  //   거절: 400 recruit_full(자리 없음) · busy(판에 앉아 있음) · too_fast(RECRUIT_GAP_SEC) · 403 muted(채팅 금지) · guide_locked
+  const recruits = new Map<number, PQ.Recruit>() // 채팅 메시지 id → 초대장(서버 메모리 — 파티도 메모리라 재시작하면 함께 사라진다)
+  const lastRecruit = new Map<string, number>() // 파티 코드 → 마지막 모집 시각
+  const cardOf = (id: number) => {
+    const r = recruits.get(id)
+    if (!r) return null
+    return { code: r.code, quest: r.quest, diff: r.diff, ...hub.recruitOpen(r, clock()) }
+  }
+  if (d.chat) d.chat.cards = cardOf
+
+  app.post('/v1/party/recruit', auth, async (c) => {
+    const b = await body(c)
+    const x = await ctx(c)
+    notLocked(x)
+    if (!d.chat) throw blocked('no_chat', 'chat is not available')
+    let l = hub.lobbyOf(x.id)
+    if (!l) l = hub.lobbyFromTicket(x.id, x.now)
+    if (!l) {
+      const quest = b.quest
+      if (!PQ.isQuest(quest)) throw new ApiError(400, 'bad_request', `'quest' must be one of ${PQ.QUESTS.join(', ')}`)
+      const diff = diffOf(b.diff)
+      if (diff > (await stats(x))[quest].best + 1) throw blocked('locked', `difficulty ${diff} is locked`)
+      const made = hub.createLobby(await seatFor(x, quest, b), quest, diff, x.now)
+      if (typeof made === 'string') throw lobbyFail(made)
+      l = made
+    }
+    if (l.members.length >= PQ.SEATS[l.quest]) throw blocked('recruit_full', 'the party is full')
+    if (hub.lobbyInMatch(l)) throw lobbyFail('busy')
+    const last = lastRecruit.get(l.code) ?? -1e12
+    if (x.now - last < PQ.RECRUIT_GAP_SEC) throw blocked('recruit_wait', `wait ${Math.ceil(PQ.RECRUIT_GAP_SEC - (x.now - last))} s before recruiting again`)
+    const text = txt('server.party.recruit', { quest: txt(`server.party.quest.${l.quest}`), diff: txt(`server.party.diff.${l.diff}`),
+      count: l.members.length, size: PQ.SEATS[l.quest], code: l.code })
+    const rec: PQ.Recruit = { code: l.code, quest: l.quest, diff: l.diff, at: x.now }
+    const msg = await d.chat.send(x.id, 'all', text, (id: number) => recruits.set(id, rec))
+    lastRecruit.set(l.code, x.now)
+    for (const [id, r] of recruits) if (x.now - r.at > PQ.RECRUIT_TTL_SEC * 2) recruits.delete(id)
+    for (const [k, at] of lastRecruit) if (x.now - at > PQ.RECRUIT_GAP_SEC * 4) lastRecruit.delete(k)
+    return c.json({ ...(await view(x)), msg })
   })
 
   // --- 초대 ---
@@ -476,7 +533,12 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     app.post('/v1/test/party_bots_now', auth, async (c) => {
       const x = await ctx(c)
       const t = hub.ticketOf(x.id)
-      for (const q of hub.queue) if (q === t || (t?.seat.group && q.seat.group === t.seat.group)) q.since = x.now - PQ.BOT_WAIT_SEC
+      for (const q of hub.queue) {
+        if (q === t || (t?.seat.group && q.seat.group === t.seat.group)) {
+          q.since = x.now - PQ.BOT_WAIT_SEC
+          q.seat.bots = true
+        }
+      }
       return c.json(await view(x))
     })
   }

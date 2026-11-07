@@ -68,7 +68,8 @@ const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 �
 static var NO_GOLD_TEXT := Lang.t("economy.no_gold_text")
 static var NO_DIA_TEXT := Lang.t("economy.no_dia_text")
 static var NO_TICKET_TEXT := Lang.t("economy.no_ticket_text")
-static var QUEST_FAIL_TEXT := {"too_soon": Lang.t("economy.quest_fail_text.too_soon"), "not_done": Lang.t("economy.quest_fail_text.not_done"), "stale": Lang.t("economy.quest_fail_text.stale")}
+static var QUEST_FAIL_TEXT := {"too_soon": Lang.t("economy.quest_fail_text.too_soon"), "not_done": Lang.t("economy.quest_fail_text.not_done"), "stale": Lang.t("economy.quest_fail_text.stale"),
+	"guide_changed": Lang.t("economy.quest_fail_text.guide_changed")}
 static var QUEST_FAIL_DEFAULT := Lang.t("economy.quest_fail_default")
 static var GACHA_LEVEL_TEXT := Lang.t("economy.gacha_level_text")  # 레벨업 알림(개정 23)
 static var GACHA_LEVEL_NO_SSR_TEXT := Lang.t("economy.gacha_level_no_ssr_text")  # SSR이 아직 없는 레벨(2026-10-12)

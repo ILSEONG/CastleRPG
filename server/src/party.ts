@@ -2,7 +2,8 @@
 //  리치(lich): 4명 실시간, 성주마다 영웅 1명 — 보상 반지. 거미 여왕(spider): 3명, 성주마다 병사 4마리(조종 없음) — 보상 목걸이.
 //  난이도 1 쉬움 · 2 보통(쉬움 ×10) · 3 어려움(보통 ×5) · 4 매우 어려움(어려움 ×3) — 사용자 수치. 배수는 적 HP·공격 모두에.
 //  매칭: 같은 퀘스트·난이도 대기열에서 자리 수만큼 모이면 [입장 수락] 확인(CONFIRM_SEC) — 모두 수락해야 시작한다. 거절·시간 초과한 사람은 대기열에서 빠지고
-//  수락한 사람은 대기열 앞으로 돌아간다. BOT_WAIT_SEC 넘게 기다리면 빈 자리를 AI 성주가 채운다(동시접속이 적어도 판이 열리게, Claude 기본값).
+//  수락한 사람은 대기열 앞으로 돌아간다. 빈 자리는 사람으로만 채운다(2026-11-07 사용자 "파티던전 AI 성주 채우지말고") — 사람이 모자라면 [파티원 모집]으로
+//  채팅에 초대장을 올려 모은다. AI 성주는 슈퍼관리자 시험 판(자리 bots)만 BOT_WAIT_SEC 뒤 채운다.
 // 판 결과·보상은 party_routes.ts(표 party_runs·party_stats). 실시간 방은 party_live.ts.
 import { randomUUID } from 'node:crypto'
 import { mulberry32 } from './rules.ts'
@@ -34,7 +35,7 @@ export const DROP_WEIGHTS: number[][] = [
   [0, 5, 25, 40, 22, 8],
 ]
 export const CONFIRM_SEC = 15 // [입장 수락] 제한 시간
-export const BOT_WAIT_SEC = 30 // 이만큼 기다리면 빈 자리를 AI 성주가 채운다
+export const BOT_WAIT_SEC = 30 // 시험 판(bots 자리)만: 이만큼 기다리면 빈 자리를 AI 성주가 채운다
 export const QUEUE_STALE_SEC = 12 // 대기 중 이만큼 상태를 묻지 않으면(앱을 껐다) 대기열에서 뺀다
 // 탈주(2026-11-07 사용자): 다른 성주(사람)가 남아 싸우는 판을 중간에 나가면 그 판이 끝날 때까지 다시 매칭할 수 없다(LEFT_SLACK_SEC = 제한 시간 뒤 여유).
 // 24시간 안에 나간 횟수가 LEAVE_FREE번을 넘으면 매칭 제한: 넘은 첫 번째부터 LEAVE_BAN_MIN분(마지막 값에서 멈춘다) — 롤·오버워치의 탈주 제재처럼 점점 길게.
@@ -45,7 +46,7 @@ export const LEAVE_BAN_MIN = [10, 30, 60]
 export const leaveBanSec = (leaves: number) => leaves <= LEAVE_FREE ? 0 : LEAVE_BAN_MIN[Math.min(leaves - LEAVE_FREE, LEAVE_BAN_MIN.length) - 1] * 60
 export const MATCH_TTL_SEC = 1800 // 끝나지 않은 매치는 이만큼 뒤 지운다
 // 파티 코드(사용자 2026-10-15 "파티코드 있어서 파티를 구성할수잇어"): [파티 만들기] → 코드 → 다른 성주가 [코드로 참가]. 방장이 [매칭 시작]을 누르면
-// 파티원이 한 묶음으로 대기열에 들어가 같은 매치에 앉고, 빈자리는 무작위 매칭 → BOT_WAIT_SEC 뒤 AI 성주(Claude 기본값).
+// 파티원이 한 묶음으로 대기열에 들어가 같은 매치에 앉고, 빈자리는 무작위 매칭(사람만). 매칭 중에도 모집 초대장·코드로 들어온 파티원은 같은 대기에 붙는다.
 export const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // 헷갈리는 0·O·1·I 뺌
 export const CODE_LEN = 6
 export const LOBBY_STALE_SEC = 30 // 파티원이 이만큼 상태를 묻지 않으면(앱을 껐다) 파티에서 뺀다(대기·매치 중은 빼지 않는다)
@@ -57,6 +58,10 @@ export const INVITE_TTL_SEC = 60
 export const INVITE_INBOX = 5 // 한 사람이 들고 있는 초대 수(넘으면 오래된 것부터 버린다)
 export const INVITE_MAX = 20 // 보낸 초대 수 상한(INVITE_WINDOW_SEC 안, 도배 막기)
 export const INVITE_WINDOW_SEC = 600
+// 파티원 모집(2026-11-07 사용자 "파티원 모집 버튼을 만들어서 버튼을 누르면 채팅에 파티 초대장이 가게끔", Claude 기본값 — 메이플스토리·로스트아크 파티 모집 글처럼):
+// [파티원 모집] → 전체 채팅에 초대장(파티 이름·난이도·인원·[참가]). 같은 파티는 RECRUIT_GAP_SEC에 한 번, 초대장은 RECRUIT_TTL_SEC 동안 [참가]할 수 있다.
+export const RECRUIT_GAP_SEC = 30
+export const RECRUIT_TTL_SEC = 600
 export const ONLINE_SEC = 60 // 마지막 요청이 이 안이면 '접속 중'(앱은 켜져 있으면 20초마다 채팅·초대를 묻는다)
 
 export const bossStats = (q: Quest, diff: number) => ({ hp: BOSS[q].hp * DIFF_MULT[diff - 1], atk: BOSS[q].atk * DIFF_MULT[diff - 1] })
@@ -88,9 +93,11 @@ export interface Seat {
   accepted: boolean
   left?: boolean // 판을 끝냈거나 나갔다(이 매치로 다시 묶지 않는다)
   group?: string // 파티 코드(같은 코드의 대기는 한 매치에 함께 앉는다)
+  bots?: boolean // 슈퍼관리자 시험: 이 자리가 든 판은 BOT_WAIT_SEC 뒤 빈자리를 AI 성주로 채운다(다른 판은 사람만)
 }
 export interface Lobby { code: string; quest: Quest; diff: number; leader: string; members: { seat: Seat; seen: number }[]; created: number }
 export type LobbyError = 'no_code' | 'full' | 'not_leader' | 'no_lobby' | 'busy'
+export interface Recruit { code: string; quest: Quest; diff: number; at: number }
 export interface Invite { id: string; from: string; name: string; code: string; quest: Quest; diff: number; at: number }
 export interface Ticket { seat: Seat; quest: Quest; diff: number; since: number; seen: number }
 export interface Match {
@@ -192,14 +199,14 @@ export class PartyHub {
     return true
   }
 
-  // 매치를 풀고 수락하지 않은 사람(drop)은 빼고, 나머지 사람은 대기열 앞으로 — 이미 오래 기다렸으니 빈 자리는 곧바로 AI 성주가 채운다.
+  // 매치를 풀고 수락하지 않은 사람(drop)은 빼고, 나머지 사람은 대기열 앞으로(시험 판이면 빈 자리는 곧바로 AI 성주가 채운다).
   private dissolve(m: Match, drop: Set<string>, now: number) {
     this.matches.delete(m.id)
-    const back = m.seats.filter((s) => s.pid && !drop.has(s.pid)).map((s) => ({ seat: { ...s, accepted: false }, quest: m.quest, diff: m.diff, since: now - BOT_WAIT_SEC, seen: now }))
+    const back = m.seats.filter((s) => s.pid && !drop.has(s.pid)).map((s) => ({ seat: { ...s, accepted: false }, quest: m.quest, diff: m.diff, since: s.bots ? now - BOT_WAIT_SEC : now, seen: now }))
     this.queue.unshift(...back)
   }
 
-  // 시간 흐름: 오래 안 물은 대기 빼기 · 수락 마감 · 매치 만들기(사람 먼저, 오래 기다리면 AI 성주로 채움) · 오래된 매치 지우기.
+  // 시간 흐름: 오래 안 물은 대기 빼기 · 수락 마감 · 매치 만들기(자리가 다 차면 — 시험 판만 오래 기다리면 AI 성주로 채움) · 오래된 매치 지우기.
   tick(now: number) {
     this.queue = this.queue.filter((t) => now - t.seen <= QUEUE_STALE_SEC)
     for (const m of [...this.matches.values()]) {
@@ -240,7 +247,7 @@ export class PartyHub {
           const picks: Ticket[] = [...units[0]]
           const rest = units.slice(1).map((u, i) => ({ u, i })).sort((a, b) => b.u.length - a.u.length || a.i - b.i)
           for (const { u } of rest) if (picks.length + u.length <= need) picks.push(...u)
-          if (picks.length >= need || picks.some((t) => now - t.since >= BOT_WAIT_SEC)) this.open(q, d, picks, now)
+          if (picks.length >= need || picks.some((t) => t.seat.bots && now - t.since >= BOT_WAIT_SEC)) this.open(q, d, picks, now)
           else break
         }
       }
@@ -252,7 +259,7 @@ export class PartyHub {
     this.queue = this.queue.filter((t) => !taken.has(t))
     const seats = picks.map((t) => ({ ...t.seat, accepted: false }))
     const r = mulberry32((this.rand() * 2 ** 31) >>> 0)
-    for (let n = 0; seats.length < SEATS[quest]; n++) seats.push({ ...this.makeBot(quest, diff, seats[n % picks.length], n, r), accepted: true })
+    if (picks.some((t) => t.seat.bots)) for (let n = 0; seats.length < SEATS[quest]; n++) seats.push({ ...this.makeBot(quest, diff, seats[n % picks.length], n, r), accepted: true })
     const id = `${now.toFixed(0)}-${++this.seq}-${randomUUID().slice(0, 8)}`
     this.matches.set(id, { id, quest, diff, seats, state: 'confirm', deadline: now + CONFIRM_SEC, started: 0, seed: Math.floor(this.rand() * 2 ** 31), result: null, created: now })
   }
@@ -293,10 +300,44 @@ export class PartyHub {
       return l
     }
     if (l.members.length >= SEATS[l.quest]) return 'full'
-    if (this.matchOf(seat.pid!)?.state === 'confirm') return 'busy'
+    if (this.matchOf(seat.pid!)?.state === 'confirm' || this.lobbyInMatch(l)) return 'busy'
     this.leaveLobby(seat.pid!)
     this.leave(seat.pid!)
     l.members.push({ seat: { ...seat, accepted: false }, seen: now })
+    // 파티가 매칭 중이면(모집 초대장·코드로 들어왔다) 같은 묶음으로 대기열에 붙는다
+    if (this.lobbyQueued(l)) {
+      this.queue.push({ seat: { ...seat, accepted: false, group: l.code }, quest: l.quest, diff: l.diff, since: now, seen: now })
+      this.tick(now)
+    }
+    return l
+  }
+
+  // 파티가 매칭 대기 중이다(방장이 [매칭 시작]).
+  lobbyQueued(l: Lobby): boolean {
+    return this.queue.some((t) => t.seat.group === l.code)
+  }
+
+  // 파티원 누가 수락 확인·시작한 판에 앉아 있다(새 파티원은 그 판에 못 들어간다).
+  lobbyInMatch(l: Lobby): boolean {
+    return l.members.some((m) => !!this.matchOf(m.seat.pid!))
+  }
+
+  // 모집 초대장으로 지금 들어갈 수 있나: 파티가 있고 · 자리가 남고 · 판에 앉아 있지 않고 · 초대장이 RECRUIT_TTL_SEC 안.
+  recruitOpen(r: Recruit, now: number): { open: boolean; count: number; size: number } {
+    const l = this.lobbies.get(r.code)
+    const size = SEATS[r.quest]
+    if (!l || l.quest !== r.quest) return { open: false, count: size, size }
+    return { open: now - r.at < RECRUIT_TTL_SEC && l.members.length < size && !this.lobbyInMatch(l), count: l.members.length, size }
+  }
+
+  // 혼자 매칭 중에 [파티원 모집]: 지금 대기를 그대로 파티(내가 방장) 묶음으로 바꾼다(기다린 시간 유지).
+  lobbyFromTicket(pid: string, now: number): Lobby | null {
+    const t = this.ticketOf(pid)
+    if (!t || t.seat.group) return null
+    this.leaveLobby(pid)
+    const l: Lobby = { code: this.newCode(), quest: t.quest, diff: t.diff, leader: pid, members: [{ seat: { ...t.seat, accepted: false }, seen: now }], created: now }
+    this.lobbies.set(l.code, l)
+    t.seat = { ...t.seat, group: l.code }
     return l
   }
 

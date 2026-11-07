@@ -162,17 +162,23 @@ func _card(q: String) -> Control:
 	row2.add_theme_constant_override("separation", 8)
 	box.add_child(row2)
 	var party_b := _button(Lang.t("party_view.card_3"), UiKit.STEEL, 24)
-	party_b.custom_minimum_size = Vector2(200, 56)
+	party_b.custom_minimum_size = Vector2(170, 56)
 	party_b.pressed.connect(_party_button.bind(q))
 	row2.add_child(party_b)
 	buttons["party:" + q] = party_b
+	# [파티원 모집](2026-11-07 사용자): 전체 채팅에 파티 초대장 — 파티가 없으면 만들면서 올린다(메이플스토리 파티 모집 글처럼)
+	var rec := _button(Lang.t("party_view.card_5"), UiKit.AMBER, 24)
+	rec.custom_minimum_size = Vector2(170, 56)
+	rec.pressed.connect(_recruit.bind(q))
+	row2.add_child(rec)
+	buttons["recruit:" + q] = rec
 	var start := _button(Lang.t("party_view.card"), HudScript.ACCENT, 28)
 	start.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start.pressed.connect(_start.bind(q))
 	row2.add_child(start)
 	buttons["start:" + q] = start
 	_cards[q] = {"diffs": diffs, "odds": odds, "left": left, "pick": pick, "row": pick_row, "reason": reason, "start": start,
-		"lobby": lobby_box, "code": code_label, "copy": copy, "invite": inv, "members": members, "party": party_b}
+		"lobby": lobby_box, "code": code_label, "copy": copy, "invite": inv, "members": members, "party": party_b, "recruit": rec}
 	return panel
 
 
@@ -247,6 +253,13 @@ func _party_button(q: String) -> void:
 		if w != "":
 			Economy.notice.emit(w)
 	refresh()
+
+
+func _recruit(q: String) -> void:
+	Party.recruit(q, int(diff[q]), _hero() if q == "lich" else "", Party.pick_soldiers() if q == "spider" else [], func(_ok, text):
+		if text != "":
+			Economy.notice.emit(text)
+		refresh())
 
 
 func _copy_code() -> void:
@@ -347,6 +360,11 @@ func refresh() -> void:
 		pb.text = Lang.t("party_view.refresh_12") if mine else Lang.t("party_view.refresh_13")
 		pb.disabled = (not mine and (st != "idle" or (Party.in_lobby() and not mine))) or (mine and st == "confirm")
 		c.lobby.visible = mine
+		# [파티원 모집]: 이 퀘스트 파티에 있거나, 파티가 없고(다른 퀘스트 매칭·파티가 아니면) 쉬고 있거나 이 퀘스트를 혼자 매칭 중일 때
+		var rb: Button = c.recruit
+		var other: bool = (Party.in_lobby() and not mine) or (st != "idle" and busy_q != q)
+		rb.disabled = other or st == "confirm" or st == "live" or Party.recruit_block(q, d, _hero() if q == "lich" else "", soldiers) != ""
+
 		if mine:
 			var l := Party.lobby()
 			var code := str(l.get("code", ""))
@@ -373,7 +391,7 @@ func refresh() -> void:
 				lines.append("%s  —  %s" % [who, what] if what != "" else who)
 			var empty: int = int(l.get("size", PartyRules.SEATS[q])) - (l.get("members", []) as Array).size()
 			if empty > 0:
-				lines.append(Lang.t("party_view.refresh_19") % [empty, int(PartyRules.BOT_WAIT_SEC)])
+				lines.append(Lang.t("party_view.refresh_19") % empty)
 			if not leader:
 				lines.append(Lang.t("party_view.refresh_20"))
 			c.members.text = "\n".join(lines)

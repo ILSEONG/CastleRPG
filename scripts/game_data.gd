@@ -86,11 +86,11 @@ const UPGRADE_NUM_COLS := ["per_level", "max_level", "cost_base", "cost_growth"]
 const UPGRADE_UNITS := ["pct", "pp"]
 const UPGRADE_KEYS := {"atk": "atk_pct", "hp": "hp_pct", "aspd": "aspd_pct", "mspd": "mspd_pct", "crit_rate": "crit_rate", "crit_dmg": "crit_dmg"}  # 항목 id → upgrade_bonus 키
 const BASE_CRIT_MULT := 1.5  # 모든 아군 공격의 기본 치명타 배율(개정 20 §3)
-# L → L+1 골드 = round(등급 값 × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))) (2026-10-13 최대 Lv 200, 골드 수급량 기준으로 다시 짬).
+# L → L+1 골드 = round(등급 값 × 1.024^(L−1) × e^(4.8 × (1 − e^(−(L−1)/20)))) (2026-11-07 사용자: 갈수록 증가폭이 크게, 예전 1.2조는 과함).
 # 한 레벨 상승률이 Lv 1 ×1.24 → Lv 50 ×1.10 → Lv 100 ×1.06 → Lv 199 ×1.04로 줄어 진도별 하루 골드 수입을 따라간다. 서버 rules와 같다
-const LEVELUP_GOLD_GROWTH := 1.037
-const LEVELUP_GOLD_BOOST := 8.2
-const LEVELUP_GOLD_TAU := 45.0
+const LEVELUP_GOLD_GROWTH := 1.024
+const LEVELUP_GOLD_BOOST := 4.8
+const LEVELUP_GOLD_TAU := 20.0
 # --- 던전·장비(개정 18). 서버 rules.ts·seed.ts(던전·장비 블록)와 같은 규칙 ---
 const DUNGEONS_PATH := "res://data/dungeons.csv"
 const EQUIP_DROP_PATH := "res://data/equip_drop.csv"
@@ -711,29 +711,13 @@ static func max_level(promotion: int) -> int:
 	return int(config_num("hero_max_level_base")) + int(config_num("hero_max_level_per_promotion")) * promotion
 
 
-## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))). 식량 없음(개정 12).
+## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.024^(L−1) × e^(4.8 × (1 − e^(−(L−1)/20)))) (2026-11-07 사용자: 갈수록 증가폭이 크게, 1.2조는 과함 → SSR 1→300 14.6억). 식량 없음(개정 12).
 static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	var g := config_num("levelup_gold_" + grade)
 	var gold := 0
 	for l in range(level, level + count):
-		gold += roundi(minf(g * pow(LEVELUP_GOLD_GROWTH, l - 1) * exp(LEVELUP_GOLD_BOOST * (1.0 - exp(-(l - 1) / LEVELUP_GOLD_TAU))), levelup_cap(g, l)))
+		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, l - 1) * exp(LEVELUP_GOLD_BOOST * (1.0 - exp(-(l - 1) / LEVELUP_GOLD_TAU))))
 	return {"gold": gold}
-
-
-## 레벨업 1회 상한(2026-11-07 사용자: 영웅 1명 1레벨 = 그 레벨이 필요한 라운드 10분 처치 골드). 서버 rules.levelupCap과 같은 식.
-## 상한 = 등급 값 × LEVELUP_CAP_PER_BASE × 처치 골드 배율(그 라운드). LEVELUP_CAP_PER_BASE = 10분(8라운드 × 75초) × 라운드 골드(72마리 × 5 + 보스 125 = 485) ÷ SSR 등급 값 240.
-## 라운드 = LEVELUP_CAP_ROUNDS(레벨 → 그 레벨이 있어야 깨는 라운드, SSR 4명·장비·병사 없음 시뮬레이션 2026-11-06·07) 사이 직선.
-const LEVELUP_CAP_PER_BASE := 3880.0 / 240.0
-const LEVELUP_CAP_ROUNDS := [[1, 10], [13, 20], [30, 30], [51, 40], [95, 50], [101, 60], [111, 75], [151, 100], [201, 125], [234, 150], [281, 200], [300, 230]]
-static func levelup_cap(base: float, level: int) -> float:
-	var r := float(LEVELUP_CAP_ROUNDS[-1][1])
-	for i in range(1, LEVELUP_CAP_ROUNDS.size()):
-		var a: Array = LEVELUP_CAP_ROUNDS[i - 1]
-		var b: Array = LEVELUP_CAP_ROUNDS[i]
-		if level <= int(b[0]):
-			r = float(a[1]) + float(b[1] - a[1]) * float(maxi(level, int(a[0])) - int(a[0])) / float(int(b[0]) - int(a[0]))
-			break
-	return base * LEVELUP_CAP_PER_BASE * (1.0 + GOLD_LINEAR * (r - 1.0)) * pow(GOLD_GROWTH, r - 1.0)
 
 
 # --- 공용 업그레이드(개정 20 §2·§3). 서버 rules.upgradeCost와 같은 식 ---

@@ -232,8 +232,18 @@ func _merge(ch: String, rows) -> bool:
 	return added
 
 
+## party = 파티원 모집 초대장 {code, quest, diff, count, size, open}(서버 /v1/party/recruit — 받은 때의 상태, [참가]를 누르면 서버가 다시 본다).
 func _row(r: Dictionary) -> Dictionary:
-	return {"id": int(r.get("id", 0)), "name": str(r.get("name", "")), "text": str(r.get("text", "")), "at": float(r.get("at", 0)), "me": bool(r.get("me", false))}
+	var out := {"id": int(r.get("id", 0)), "name": str(r.get("name", "")), "text": str(r.get("text", "")), "at": float(r.get("at", 0)), "me": bool(r.get("me", false))}
+	if r.get("party") is Dictionary:
+		out.party = r.party
+	return out
+
+
+## 다른 기능이 서버에 올린 내 메시지(파티원 모집 초대장)를 바로 보이게 더한다.
+func add_mine(ch: String, msg: Dictionary) -> void:
+	if ch in CHANNELS and _merge(ch, [msg]):
+		changed.emit()
 
 
 ## 가장 최근 줄(채팅 줄 표시용): {ch, name, text} 또는 {}.

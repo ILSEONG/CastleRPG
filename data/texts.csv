@@ -346,6 +346,7 @@ economy.no_dia_text,다이아가 부족합니다,,,,scripts/economy.gd
 economy.no_ticket_text,다이아 모집권이 부족합니다,,,,scripts/economy.gd
 economy.quest_fail_text.too_soon,잠시 후 다시 받아 주세요,,,,scripts/economy.gd
 economy.quest_fail_text.not_done,아직 완료하지 않은 미션입니다,,,,scripts/economy.gd
+economy.quest_fail_text.guide_changed,가이드 퀘스트가 새로 바뀌었습니다. 앱을 최신 버전으로 업데이트해 주세요,,,,scripts/economy.gd
 economy.quest_fail_text.stale,이미 받은 보상입니다,,,,scripts/economy.gd
 economy.quest_fail_default,보상을 받지 못했습니다. 잠시 후 다시 시도해 주세요,,,,scripts/economy.gd
 economy.gacha_level_text,골드 모집 Lv %d! SSR %s%%,,,,scripts/economy.gd
@@ -2770,7 +2771,7 @@ party_view.refresh_15,나,,,,scripts/party_view.gd
 party_view.refresh_16, (나),,,,scripts/party_view.gd
 party_view.refresh_17, · 방장,,,,scripts/party_view.gd
 party_view.refresh_18,병사 %d마리 (최고 T%d),,,,scripts/party_view.gd
-party_view.refresh_19,"빈자리 %d — 매칭을 시작하면 다른 성주로, %d초 뒤에는 AI 성주로 채웁니다",,,,scripts/party_view.gd
+party_view.refresh_19,빈자리 %d — 다른 성주로만 채웁니다. [파티원 모집]으로 채팅에 초대장을 올려 보세요,,,,scripts/party_view.gd
 party_view.refresh_20,방장이 매칭을 시작하면 입장 수락 창이 뜹니다,,,,scripts/party_view.gd
 party_code_panel.ready,코드로 참가,,,,scripts/party_code_panel.gd
 party_code_panel.ready_2,친구에게 받은 파티 코드를 입력하세요,,,,scripts/party_code_panel.gd
@@ -2933,3 +2934,22 @@ party.error_text.member_penalty,파티원 중 매칭이 제한된 성주가 있�
 party.queue_block_6,파티 던전을 자주 나가 %s 동안 매칭할 수 없습니다,,,,scripts/party.gd
 party.queue_block_7,나간 판이 끝나면 다시 매칭할 수 있습니다 (%s),,,,scripts/party.gd
 party_hud.on_leave_3,"한 번 더 누르면 포기합니다(패배)\n판이 끝날 때까지 다시 매칭할 수 없고, 자주 나가면 매칭이 제한됩니다",,,,scripts/party_hud.gd
+server.party.recruit,[파티 모집] {quest} · {diff} ({count}/{size}) 함께하실 성주님 구합니다! 코드 {code},,,,server/src/party_routes.ts
+server.party.quest.lich,리치의 무덤,,,,server/src/party_routes.ts
+server.party.quest.spider,거미 여왕의 둥지,,,,server/src/party_routes.ts
+server.party.diff.1,쉬움,,,,server/src/party_routes.ts
+server.party.diff.2,보통,,,,server/src/party_routes.ts
+server.party.diff.3,어려움,,,,server/src/party_routes.ts
+server.party.diff.4,매우 어려움,,,,server/src/party_routes.ts
+party.error_text.recruit_full,파티 자리가 모두 찼습니다,,,,scripts/party.gd
+party.error_text.recruit_wait,모집 글은 30초에 한 번 올릴 수 있습니다,,,,scripts/party.gd
+party.error_text.muted,채팅이 금지되어 모집 글을 올릴 수 없습니다,,,,scripts/party.gd
+party.recruit_block,파티원 모집은 온라인에서만 할 수 있습니다,,,,scripts/party.gd
+party.recruit,채팅에 파티 초대장을 올렸습니다,,,,scripts/party.gd
+party.join_from_card,지금 파티·매칭을 먼저 끝내 주세요,,,,scripts/party.gd
+party_view.card_5,파티원 모집,,,,scripts/party_view.gd
+party_overlay.tick_bar.sub,함께할 성주를 찾는 중 · [파티원 모집]으로 채팅에 알릴 수 있습니다,,,,scripts/party_overlay.gd
+chat_panel.party_card,[color=#%s]%s:[/color] [color=#%s][b]파티 모집[/b][/color] %s,,,,scripts/chat_panel.gd
+chat_panel.party_card_2,내 파티,,,,scripts/chat_panel.gd
+chat_panel.party_card_3,참가,,,,scripts/chat_panel.gd
+chat_panel.party_card_4,마감,,,,scripts/chat_panel.gd
