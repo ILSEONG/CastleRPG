@@ -25,6 +25,7 @@ const Crowd := preload("res://scripts/crowd.gd")
 
 const LAYER_GATE := 2
 const LAYER_WALL := 8
+const LAYER_GATEHOUSE := 64  # 문루 전체 탭 상자(castle.gd) — 성문 창 열기만
 const LAYER_TAP := 16  # 건물 탭 판정체(buildings.gd)
 const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — 건물보다 먼저 본다(앞쪽 벌목장·채석장 상자에 가리지 않게)
 const TAP_MAX_PX := 12.0
@@ -119,6 +120,8 @@ func _physics_process(_delta: float) -> void:
 	# 영웅은 화면 좌표로 판정하므로 성문·성벽 탭 박스(여유 1m)에 가려질 일이 없다.
 	if selected == null or not selected.is_alive():
 		var tapped = _hero_at(screen_pos, HERO_TAP_PX)
+		if tapped != null and arena_r <= 0.0 and hero_tap_dist(tapped, screen_pos) > HERO_TAP_PRECISE_PX and _gate_tap(screen_pos):
+			tapped = null  # 성문 위·앞에 선 영웅 옆을 눌렀다: 건물처럼 성문 창(사용자 2026-11-07 "성문도 터치할 수 있게") — 영웅 몸을 누르면 영웅
 		if tapped == null and arena_r <= 0.0 and _tap_object(screen_pos):
 			return  # 상인·자원 건물: 선택은 그대로(없으면 없는 채)
 		_select(tapped)
@@ -242,12 +245,19 @@ func _tap_object(screen_pos: Vector2) -> bool:
 	if id == GameData.DISPATCH and dispatch != null and badges.dispatch_bubble(Economy.time_now()):
 		dispatch.open()  # 2026-10-13: 금화 자루 말풍선이 떠 있으면 곧바로 파견소 창
 		return true
-	if id == "" and not _pick(screen_pos, LAYER_GATE).is_empty():
+	if id == "" and not _pick(screen_pos, LAYER_GATE | LAYER_GATEHOUSE).is_empty():  # 문짝·문루 탑·문루 지붕 어디를 눌러도
 		id = GameData.GATE
 	if id == "":
 		return false
 	building_panel.open_building(id)
 	return true
+
+
+## 누른 곳이 성문 탭 상자인가(상인·건물·말풍선이 먼저 — _tap_object와 같은 순서). 스테이지 중에는 성문을 열지 않는다.
+func _gate_tap(screen_pos: Vector2) -> bool:
+	if stage_running() or not _pick(screen_pos, LAYER_MERCHANT).is_empty() or _bubble_hit(screen_pos) != "" or _building_hit(screen_pos) != "":
+		return false
+	return not _pick(screen_pos, LAYER_GATE | LAYER_GATEHOUSE).is_empty()
 
 
 ## 스테이지 전투 중(성 화면에서 스테이지를 미는 동안). 이때는 건물 탭·길게 누르기가 아무것도 열지 않는다.
@@ -262,7 +272,7 @@ func _building_at(screen_pos: Vector2) -> String:
 	var id := _building_hit(screen_pos)
 	if id != "":
 		return id
-	return GameData.GATE if not _pick(screen_pos, LAYER_GATE).is_empty() else ""
+	return GameData.GATE if not _pick(screen_pos, LAYER_GATE | LAYER_GATEHOUSE).is_empty() else ""
 
 
 ## 수집 결과 "+N". 오프라인은 탭 즉시, 온라인은 서버 응답의 amount로.

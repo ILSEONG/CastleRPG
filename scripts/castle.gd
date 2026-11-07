@@ -17,6 +17,7 @@ const TownKit := preload("res://scripts/town_kit.gd")
 
 const LAYER_GATE := 2
 const LAYER_WALL := 8
+const LAYER_GATEHOUSE := 64  # 문루 전체(성문 + 양옆 문루 탑) — 성문 창 열기만(unit_picker). 영웅 이동 명령은 LAYER_GATE·LAYER_WALL 그대로
 const TAP_MARGIN := Vector3(1, 1, 1)  # 탭 판정 박스 여유
 const SIDE_TAG_Y := Balance.WALL_H + 2.5  # 문루(기둥 지붕 끝 ~5.3 m) 위 방향 글자 이름표 아랫변 기준점 높이
 static var LOOK_TEXT := Lang.t("castle.look_text")
@@ -71,6 +72,7 @@ func _build_look(lk: int) -> void:
 	var doors_mesh := TownKit.gate_doors()
 	var stairs_mesh := TownKit.stairs()
 	_add_tower_taps(lk)
+	_add_gatehouse_taps(lk, offs)
 	var walls := {}  # 토막 길이 → 메시
 	for side in 4:
 		var dir: Vector3 = Formation.SIDE_DIR[side]
@@ -171,6 +173,17 @@ func _add_tower_taps(lk: int) -> void:
 		var corner: Vector3 = (Formation.SIDE_DIR[k] + Formation.SIDE_DIR[(k + 1) % 4]) * c
 		var area := _add_tap_area(corner, Vector3(w, h, w), LAYER_WALL, k, NAN, _look)
 		area.set_meta("tower", true)
+
+
+## 문루 탭 상자: 성문 폭 + 양옆 문루 탑, 성벽 + 바깥으로 튀어나온 탑, 문루 지붕까지(성 모습 단계마다 크기가 달라 _look 아래).
+func _add_gatehouse_taps(lk: int, offs: Array) -> void:
+	var w: float = Balance.GATE_W + 2.0 * float(TownKit.LOOK_GATE_W[lk])
+	var h: float = Balance.WALL_H + float(TownKit.LOOK_GATE_UP[lk]) + float(TownKit.LOOK_GATE_ROOF[lk]) * 0.5
+	var out: float = float(TownKit.LOOK_GATE_OUT[lk])
+	for side in 4:
+		var perp := Formation.perp(side)
+		for at in offs:
+			_add_tap_area(Formation.gate_position(half, side, at) + Formation.SIDE_DIR[side] * (out / 2.0), _along(perp, w, h, Balance.WALL_T + out), LAYER_GATEHOUSE, side, at, _look)
 
 
 func _add_tap_area(ground_center: Vector3, size: Vector3, layer: int, side: int, at := NAN, parent: Node = null) -> Area3D:

@@ -203,7 +203,56 @@ func _run() -> void:
 	_check(not pl.is_active() and scenery.lots.houses.mi.visible and Economy.layout.houses == dest, "cancel keeps the building where it was", "")
 	await _copies(list, pl, btn)
 	await _overlaps(list, btn)
+	await _gate_taps()
 	await _stage_taps(pl)
+
+
+## 성문도 건물처럼 맵에서 눌러 연다(사용자 2026-11-07 "성채, 농장, 벌목장 처럼 성문도 터치할 수 있게 해줘"): 네 면 성문의 문짝·문루 탑·문루 지붕을
+## 눌러 성문 창이 열린다. 성문 위·앞에 선 영웅 몸(24 px 안)을 정확히 누르면 그 영웅이 골라진다.
+func _gate_taps() -> void:
+	const Formation := preload("res://scripts/formation.gd")
+	const TownKit := preload("res://scripts/town_kit.gd")
+	var bp = _find("res://scripts/building_panel.gd")
+	var picker = _find("res://scripts/unit_picker.gd")
+	var cam: Camera3D = _main.camera
+	var half: float = _main.castle.half
+	var lk: int = _main.castle.look
+	var vr := get_viewport().get_visible_rect()
+	var opened := 0
+	var tried := 0
+	var bad := []
+	for side in 4:
+		var dir: Vector3 = Formation.SIDE_DIR[side]
+		var pp: Vector3 = Formation.perp(side)
+		var g: Vector3 = Formation.gate_position(half, side)
+		var tower := Balance.GATE_W / 2.0 + float(TownKit.LOOK_GATE_W[lk]) * 0.7
+		var points := {"door": g + dir * 0.9 + Vector3(0, 1.5, 0), "tower": g + pp * tower + dir * 0.9 + Vector3(0, Balance.WALL_H, 0),
+			"roof": g - pp * tower + Vector3(0, Balance.WALL_H + float(TownKit.LOOK_GATE_UP[lk]), 0)}
+		for what in points:
+			var at := cam.unproject_position(points[what])
+			if not vr.has_point(at):
+				continue
+			if picker.selected != null:
+				picker._select(null)
+			var near = picker._hero_at(at, picker.HERO_TAP_PRECISE_PX)
+			await _tap(at)
+			await get_tree().create_timer(0.25).timeout
+			tried += 1
+			if near != null:
+				if picker.selected != near:
+					bad.append("%d %s: hero body not picked" % [side, what])
+			elif bp.visible and bp.building_id == "gate":
+				opened += 1
+				if what == "tower" and side == 2:
+					await _shot("_gate_tower")
+			else:
+				bad.append("%d %s: %s %s sel %s" % [side, what, bp.visible, bp.building_id, picker.selected])
+			if bp.visible:
+				bp.close()
+			await get_tree().create_timer(0.25).timeout
+	if picker.selected != null:
+		picker._select(null)
+	_check(tried >= 8 and opened >= tried - 2 and bad.is_empty(), "idle: tapping a gate's door, gatehouse tower or roof opens the gate window (%d of %d; a hero body tapped right on picks the hero)" % [opened, tried], str(bad))
 
 
 ## 띠와 다른 창이 겹치지 않는다(사용자 2026-11-02 "건설 누르고 영웅 누르니까 겹치잖아"): 펼친 채 하단 [영웅] 탭 → 띠가 접힌다,
