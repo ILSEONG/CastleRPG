@@ -216,11 +216,11 @@ func _bubble_hit(screen_pos: Vector2) -> String:
 
 ## 말풍선(화면 공간) → 상인(레이어 32) → 건물(레이어 16) → 성문(레이어 2, 선택된 영웅이 없을 때만 여기 온다) 탭. 처리했으면 true.
 func _tap_object(screen_pos: Vector2) -> bool:
-	if not _pick(screen_pos, LAYER_MERCHANT).is_empty() and (stage_running() or _bubble_hit(screen_pos) == ""):
+	if stage_running():
+		return false  # 스테이지를 미는 동안 건물·말풍선·성문(사용자 2026-10-18)·상인(2026-11-07 "스테이지 밀고 있을 때 상인 터치되면 안돼")은 탭이 안 된다 — 탭은 영웅 고르기·바닥 이동으로
+	if not _pick(screen_pos, LAYER_MERCHANT).is_empty() and _bubble_hit(screen_pos) == "":
 		panel.open()
 		return true
-	if stage_running():
-		return false  # 스테이지를 미는 동안 건물·말풍선·성문은 탭이 안 된다(사용자 2026-10-18) — 탭은 영웅 고르기로
 	var id := _bubble_hit(screen_pos)
 	if id == "":
 		id = _building_hit(screen_pos)

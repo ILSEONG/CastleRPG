@@ -317,6 +317,18 @@ func _run() -> void:
 	var mp := _camera.unproject_position(Balance.MERCHANT_POS + Vector3(0, 1.0, 0))
 	_check(not _picker._pick(mp, PickerScript.LAYER_MERCHANT).is_empty() and not _open_hero(mp),
 		"(o) precondition: merchant tap point hits the merchant body", "px=%s" % mp)
+	# (o0) 스테이지를 미는 동안(카운트다운 포함)은 상인을 눌러도 창이 안 열린다(사용자 2026-11-07)
+	var mode0 = GameState.mode
+	for md in [GameState.Mode.STAGE, GameState.Mode.COUNTDOWN]:
+		GameState.mode = md
+		_picker._select(null)
+		await _tap(mp)
+		await _frames(2)
+		_check(not panel.is_open(), "(o0) merchant tap during a stage (mode %d) opens nothing" % md, "open=%s" % panel.is_open())
+		if panel.is_open():
+			panel.close()
+	GameState.mode = mode0
+	_picker._select(warrior)
 	var free_before: Vector3 = warrior.free_pos
 	await _tap(mp)
 	await _frames(2)
