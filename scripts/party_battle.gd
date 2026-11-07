@@ -649,6 +649,13 @@ func leave() -> void:
 	if _leaving:
 		return
 	_leaving = true
+	# 결과를 아직 안 보냈으면 지금 보낸다(방장이 방의 end를 기다리던 6초 안·결과 화면에서 바로 나감 — 안 보내면 서버가 이 성주를 판에 둔 채라 "매칭 중"에 묶였다)
+	if not done:
+		done = true
+		phase = Phase.RESULT
+		result = {"win": false, "reason": "forfeit"}
+	report_result()
+	Party.left_match(str(run.get("match_id", "")))
 	if main != null:
 		main.leave_dungeon.call_deferred()
 	else:
