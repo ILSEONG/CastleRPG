@@ -265,7 +265,8 @@ func _layout_checks() -> void:
 func _raw(method: String, path: String, body, token: String) -> Dictionary:
 	var h := HTTPRequest.new()
 	add_child(h)
-	var headers := PackedStringArray(["Content-Type: application/json"])
+	# 앱과 같은 버전 머리글(2026-11-06부터 서버가 머리글 없는 요청을 옛 앱으로 보아 최소 버전이 걸려 있으면 426 — 관리자 요청도)
+	var headers := PackedStringArray(["Content-Type: application/json", "X-App-Version: " + LiveOps.app_version()])
 	if token != "":
 		headers.append("Authorization: Bearer " + token)
 	h.request(Net.api_base + path, headers, HTTPClient.METHOD_POST if method == "POST" else HTTPClient.METHOD_GET, JSON.stringify(body) if body != null else "")
