@@ -156,3 +156,21 @@ test('ranking: unknown board is 400, no token is 401', async () => {
   assert.equal((await S.req('GET', '/v1/ranking/nope', { token: p.token })).status, 400)
   assert.equal((await S.req('GET', '/v1/ranking/stage')).status, 401)
 })
+
+test('ranking: personal boards show the top 100 and my rank comes separately even outside it', async () => {
+  const me = await S.login()
+  await setStage(me.id, 1, S.clock.t - 10)
+  for (let k = 0; k < Rk.TOP_N + 1; k++) {
+    const p = await S.login()
+    await setStage(p.id, 100000 + k, S.clock.t - 10)
+  }
+  skip()
+  const r = await rank(me.token, 'stage')
+  assert.equal(Rk.TOP_N, 100)
+  assert.equal(r.top.length, 100)
+  assert.equal(r.top[99].rank, 100)
+  assert.ok(r.top.every((e: any) => !e.me))
+  assert.equal(r.me.name, G.playerName(me.id))
+  assert.ok(r.me.rank > 100)
+  assert.equal(r.me.me, true)
+})

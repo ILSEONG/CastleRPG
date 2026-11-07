@@ -1,7 +1,7 @@
 extends "res://scripts/ui_window.gd"
 ## [랭킹] 시트(온라인 전용, 서버 GET /v1/ranking/:board — server/src/ranking.ts). 오른쪽 아래 메뉴(side_menu.gd) [랭킹]이 연다.
 ## 하위 탭 [스테이지][전투력][길드]. 오른쪽 위 [X]나 바깥(배경) 탭으로 닫는다.
-## 목록 = 상위 50(1~3위 메달, 길드는 보상 순위까지 100), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
+## 목록 = 상위 100(1~3위 메달, 개인·길드 모두 100위까지), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
 ## 길드 보드(2026-10-29) = 이번 주 드래곤 보스 길드 총 피해량 순 + 주간 보상 카드(서버 season: 남은 시간·순위 구간·상자 확률).
 
 const Lang := preload("res://scripts/lang.gd")
@@ -299,7 +299,7 @@ func _draw_medal(c: Control, rank: int) -> void:
 		c.draw_polyline(rim, LowpolyBox.edge_color(col), 2.0, true)
 		c.draw_string(font, Vector2(0, ctr.y + 4), str(rank), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22, HudScript.INK)
 	else:
-		c.draw_string(font, Vector2(0, ctr.y + 9), str(rank), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 26 if rank < 100 else 20, HudScript.INK)
+		c.draw_string(font, Vector2(0, ctr.y + 9), str(rank), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 26 if rank < 100 else (20 if rank < 10000 else 16), HudScript.INK)  # 100위 밖 내 순위(수천~수만 위)도 칸 안에
 
 
 func _card(color: Color) -> PanelContainer:

@@ -15,7 +15,7 @@ export { weekOf }
 
 export const BOARDS = ['stage', 'power', 'guild'] as const
 export type Board = (typeof BOARDS)[number]
-export const TOP_N = 50
+export const TOP_N = 100 // 개인 보드(스테이지·전투력)도 100위까지 보인다(2026-11-07 사용자). 내 순위는 따로 me로 내려 목록 맨 밑에 고정한다
 export const GUILD_TOP_N = 100 // 길드 보드는 보상 순위(100위)까지 보인다
 // 길드 랭킹 주간 보상 [마지막 순위, 보상]: 1위 / 2~10위 / 11~100위(2026-10-29 사용자). 상자 = rules.EQUIP_BOXES.
 export const GUILD_REWARDS: [number, Record<string, number>][] = [[1, { equip_box_top: 1 }], [10, { equip_box_high: 1 }], [100, { equip_box_normal: 1 }]]
