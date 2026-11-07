@@ -379,6 +379,49 @@ test('party finish: alone with AI lords the win check is tighter (power slack SO
   assert.equal((await winRun(S, b.token, rb, e)).json.result.win, false)
 })
 
+
+test('party leave: leaving a match others still fight blocks matching until it ends; 3+ leaves in 24 h ban matching 10/30/60 min', async () => {
+  assert.equal(PQ.leaveBanSec(2), 0)
+  assert.deepEqual([3, 4, 5, 9].map(PQ.leaveBanSec), [600, 1800, 3600, 3600])
+  const a = await player()
+  const b = await player()
+  assert.equal((await queueLich(a)).status, 200)
+  assert.equal((await queueLich(b)).status, 200)
+  const c = await S.req('POST', '/v1/test/party_bots_now', { token: a.token })
+  const mid = c.json.party.queue.match_id
+  assert.equal(c.json.party.queue.seats.filter((s: any) => !s.bot).length, 2, JSON.stringify(c.json.party.queue))
+  await S.req('POST', '/v1/party/accept', { token: a.token, body: { match_id: mid, accept: true } })
+  const rb = (await S.req('POST', '/v1/party/accept', { token: b.token, body: { match_id: mid, accept: true } })).json.party.queue
+  const ra = (await S.req('GET', '/v1/party', { token: a.token })).json.party.queue
+  assert.equal(ra.state, 'live')
+  assert.equal(rb.state, 'live')
+  S.clock.t += 30
+  // a가 중간에 나간다(포기 = 패배 결과)
+  const fa = await S.req('POST', '/v1/party/finish', { token: a.token, body: { run_id: ra.run_id, win: false, elapsed: 30 } })
+  assert.equal(fa.status, 200, JSON.stringify(fa.json))
+  assert.equal(fa.json.party.queue.state, 'idle')
+  assert.equal(fa.json.party.block.reason, 'match_running')
+  assert.ok(fa.json.party.block.left > 0 && fa.json.party.block.left <= PQ.TIME_LIMIT.lich + PQ.LEFT_SLACK_SEC)
+  const again = await queueLich(a)
+  assert.equal(again.status, 409)
+  assert.equal(again.json.error, 'match_running', JSON.stringify(again.json))
+  assert.equal((await S.db.query('select 1 from party_leaves where player_id = $1', [a.id])).length, 1)
+  // 남은 b가 판을 끝내면 a는 다시 매칭할 수 있다(1번은 제한 없음). b는 탈주가 아니다
+  const fb = await S.req('POST', '/v1/party/finish', { token: b.token, body: { run_id: rb.run_id, win: false, elapsed: 60 } })
+  assert.equal(fb.status, 200)
+  assert.equal(fb.json.party.block, null)
+  assert.equal((await S.req('GET', '/v1/party', { token: a.token })).json.party.block, null)
+  assert.equal((await S.db.query('select 1 from party_leaves where player_id = $1', [b.id])).length, 0)
+  // 24시간 안에 3번째 탈주 → 10분 매칭 제한
+  await S.db.query('insert into party_leaves (player_id, at) values ($1, to_timestamp($2::float8)), ($1, to_timestamp($2::float8))', [a.id, S.clock.t])
+  const v = await S.req('GET', '/v1/party', { token: a.token })
+  assert.deepEqual(v.json.party.block, { reason: 'leave_penalty', left: 600 })
+  const q = await queueLich(a)
+  assert.equal(q.status, 409)
+  S.clock.t += 601
+  assert.equal((await S.req('GET', '/v1/party', { token: a.token })).json.party.block, null)
+  assert.equal((await queueLich(a)).status, 200)
+})
 // 가짜 소켓(방이 쓰는 ws.WebSocket 부분만). close·terminate의 'close'는 진짜처럼 다음 틱에 온다
 function fakeWs() {
   const ws = Object.assign(new EventEmitter(), {

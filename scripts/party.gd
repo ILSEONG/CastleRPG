@@ -23,7 +23,10 @@ static var ERROR_TEXT := {"locked": Lang.t("party.error_text.locked"), "bag_full
 	"no_lobby": Lang.t("party.error_text.no_lobby"), "busy": Lang.t("party.error_text.busy"), "member_locked": Lang.t("party.error_text.member_locked"),
 	"rate_limited": Lang.t("party.error_text.rate_limited"), "in_lobby": Lang.t("party.error_text.in_lobby"), "bad_party": Lang.t("party.error_text.bad_party"), "no_match": Lang.t("party.error_text.no_match"), "conflict": Lang.t("party.error_text.conflict"),
 	"not_friend": Lang.t("party.error_text.not_friend"), "offline": Lang.t("party.error_text.offline"), "member": Lang.t("party.error_text.member"),
-	"guide_locked": Lang.t("party.error_text.guide_locked"), "their_locked": Lang.t("party.error_text.their_locked")}
+	"guide_locked": Lang.t("party.error_text.guide_locked"), "their_locked": Lang.t("party.error_text.their_locked"),
+	"match_running": Lang.t("party.error_text.match_running"), "leave_penalty": Lang.t("party.error_text.leave_penalty"),
+	"member_running": Lang.t("party.error_text.member_running"), "member_penalty": Lang.t("party.error_text.member_penalty")}
+const BLOCK_POLL_SEC := 5.0  # 나간 판이 끝나기를 기다리는 동안 묻는 간격(남은 성주들이 먼저 끝내면 곧바로 풀린다)
 static var FAIL_TEXT := Lang.t("party.fail_text")
 
 signal changed
@@ -38,7 +41,12 @@ var save_path := SAVE_PATH
 var econ
 var started_match := ""  # battle_started를 보낸 매치(같은 매치로 두 번 열지 않는다)
 var finishing := {}  # run_id → true(결과를 보내는 중)
-var left_matches := {}  # 전투 장면을 닫고 나온 매치 id → true. 서버가 아직 live로 답해도(결과 전송 실패·늦음) 대기 없음으로 본다
+var left_matches := {}  # 전투 장면을 닫고 나온 매치 id → true. 서버가 아직 live로 답해도(결과 전송 실패·늦음) 다시 열지 않는다
+# 매칭 제한(2026-11-07 사용자 "진짜 매치가 끝났을 때만 다시 매칭", "상습적으로 나가면 패널티"): 서버 party.block {reason, left}을
+# 받은 시각 기준으로 끝나는 때를 적어 둔다. reason = match_running(나간 판이 진행 중) | leave_penalty(24시간 3번째 탈주부터 10/30/60분)
+var block_reason := ""
+var block_until := 0.0
+var _block_tick := -1
 
 var invites := []  # 받은 초대 [{id, name, quest, diff, code, left, until}](서버 GET /v1/party/invites)
 var _poll := 0.0
@@ -194,6 +202,10 @@ func last_diff(q: String) -> int:
 func queue_block(q: String, diff: int, hero: String, soldiers: Array, lobby_ok := false) -> String:
 	if state() != "idle":
 		return Lang.t("party.queue_block")
+	if block_left() > 0:
+		var t := block_left()
+		var clock := "%d:%02d" % [floori(t / 60.0), t % 60]
+		return (Lang.t("party.queue_block_6") if block_reason == "leave_penalty" else Lang.t("party.queue_block_7")) % clock
 	if in_lobby() and not lobby_ok:
 		return ERROR_TEXT.in_lobby
 	if not unlocked(q, diff):
@@ -208,6 +220,20 @@ func queue_block(q: String, diff: int, hero: String, soldiers: Array, lobby_ok :
 
 
 # --- 매칭 ---
+
+## 매칭 제한이 풀리기까지 남은 초(0 = 제한 없음).
+func block_left() -> int:
+	return maxi(0, ceili(block_until - _now())) if block_reason != "" else 0
+
+
+func _set_block(b) -> void:
+	if b is Dictionary and int(b.get("left", 0)) > 0:
+		block_reason = str(b.get("reason", ""))
+		block_until = _now() + float(b.get("left", 0))
+	else:
+		block_reason = ""
+		block_until = 0.0
+
 
 ## [매칭 시작]: 곧바로 대기 띠가 보이고 서버 확인은 뒤에서(거절되면 되돌리고 알림).
 func start_queue(q: String, diff: int, hero := "", soldiers := [], from_lobby := false) -> bool:
@@ -230,7 +256,9 @@ func start_queue(q: String, diff: int, hero := "", soldiers := [], from_lobby :=
 		_busy = false
 		view.queue = {"state": "idle"}
 		_notice(ERROR_TEXT.get(econ.net.last_error, FAIL_TEXT))
-		changed.emit(), true, true)
+		changed.emit()
+		if econ.net.last_error in ["match_running", "leave_penalty"]:
+			fetch(), true, true)  # 남은 시간을 받아 버튼에 보인다
 	return true
 
 
@@ -424,8 +452,12 @@ func _take(d) -> void:
 	var p: Dictionary = d.party
 	var q = p.get("queue")
 	if q is Dictionary and str(q.get("state", "")) == "live" and (finishing.size() > 0 or left_matches.has(str(q.get("match_id", "")))):
-		p.queue = {"state": "idle"}  # 결과를 보내는 중인 판(서버가 놓아주기 전 응답) — 다시 열지 않는다
+		# 결과를 보내는 중이거나 나온 판(서버가 놓아주기 전 응답) — 다시 열지 않는다. 나온 판이면 그 판이 끝날 때까지 매칭 제한으로 보인다
+		if left_matches.has(str(q.get("match_id", ""))) and q.get("result") == null:
+			p.block = {"reason": "match_running", "left": maxi(1, ceili(float(q.get("time_limit", 0)) - float(q.get("elapsed", 0)) + 10.0))}
+		p.queue = {"state": "idle"}
 		q = p.queue
+	_set_block(p.get("block"))
 	var old := queue()
 	view = p
 	if q is Dictionary:
@@ -466,6 +498,21 @@ func _process(delta: float) -> void:
 		if _poll <= 0.0:
 			_poll = LOBBY_POLL_SEC
 			fetch()
+		return
+	if st == "idle" and block_reason != "":
+		var t := block_left()
+		if t != _block_tick:  # 1초마다 남은 시간을 다시 그린다
+			_block_tick = t
+			changed.emit()
+		if online():
+			_poll -= delta
+			if t <= 0 or (block_reason == "match_running" and _poll <= 0.0):
+				_poll = BLOCK_POLL_SEC
+				if t <= 0:
+					block_reason = ""
+				fetch()
+		elif t <= 0:
+			block_reason = ""
 		return
 	if st == "queued" or st == "confirm":
 		if not online():
@@ -553,7 +600,8 @@ func decline_invite(inv: Dictionary) -> void:
 		econ.net.send("POST", "/v1/party/invite/decline", {"id": id}, func(_d): pass, Callable(), true, false)
 
 
-## 전투 장면을 닫았다(2026-11-07 사용자 "파티 던전에서 중간에 나가면 계속 매칭 중으로 떠"): 그 매치는 끝난 것으로 보고 바로 대기 없음으로.
+## 전투 장면을 닫았다(2026-11-07 사용자 "파티 던전에서 중간에 나가면 계속 매칭 중으로 떠"): 그 매치는 다시 열지 않고 대기 없음으로.
+## 다른 성주가 남아 싸우는 판이면 서버가 그 판이 끝날 때까지 매칭을 막는다(party.block — finish 답으로 온다).
 func left_match(match_id: String) -> void:
 	if match_id == "":
 		return

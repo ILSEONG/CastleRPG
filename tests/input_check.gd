@@ -2775,9 +2775,9 @@ func _dungeon_ui(tabs) -> void:
 	await _guard_wait()
 	var gc: Dictionary = dwin.cards.gold
 	var ec: Dictionary = dwin.cards.equip
-	_check(dwin.is_open() and keys0 == 3 and gc.keys.text == "3 / 10" and ec.keys.text == "2 / 3" and gc.reward.text == "보상 20,000 골드"
+	_check(dwin.is_open() and keys0 == 3 and gc.keys.text == "3 / 10" and ec.keys.text == "2 / 10" and gc.reward.text == "보상 20,000 골드"
 		and gc.level.text == "1단계" and gc.prev.disabled and gc.next.disabled and not gc.go.disabled and ec.reward.text.begins_with("장비 5개 · N 60% · R 30% · SR 9% · SSR 1%"),
-		"(D) [던전] sheet: gold card 3 / 10 keys, 1단계 (only level open), reward 20,000; equip card 2 / 3 with the grade odds", "gold=%s equip=%s" % [gc.reward.text, ec.reward.text])
+		"(D) [던전] sheet: gold card 3 / 10 keys, 1단계 (only level open), reward 20,000; equip card 2 / 10 with the grade odds", "gold=%s equip=%s keys=%s" % [gc.reward.text, ec.reward.text, ec.keys.text])
 	print("INPUT INFO: dungeon tab %s, gold [도전] %s, equip [도전] %s, [보관함] %s (720x1280 logical)" % [tabs.buttons.dungeon.get_global_rect(), gc.go.get_global_rect(),
 		ec.go.get_global_rect(), dwin.bag_button.get_global_rect()])
 	await _tap(gc.go.get_global_rect().get_center())
