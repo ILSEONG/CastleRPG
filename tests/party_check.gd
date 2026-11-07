@@ -240,10 +240,20 @@ func _run() -> void:
 		b4.leave()
 		await _frames(4)
 		var reported: bool = b4._reported if is_instance_valid(b4) else true
-		Party._take({"party": {"quests": Party.view.get("quests", {}), "queue": {"state": "live", "match_id": mid, "run_id": "x", "quest": "lich", "diff": 1}}})
+		Party._take({"party": {"quests": Party.view.get("quests", {}), "queue": {"state": "live", "match_id": mid, "run_id": "x", "quest": "lich", "diff": 1, "time_limit": 180, "elapsed": 60}}})
 		await _frames(2)
-		_check(reported and _battle() == null and Party.state() == "idle" and not view.buttons["start:lich"].disabled,
-			"leaving while the result was not sent yet still reports it, and a late live answer for that match stays idle (start is on)")
+		# 2026-11-07 "진짜 매치가 끝났을 때만 다시 매칭": 나온 판이 서버에서 아직 진행 중이면 대기 없음 + 그 판이 끝날 때까지 [매칭 시작]이 꺼진다
+		_check(reported and _battle() == null and Party.state() == "idle" and view.buttons["start:lich"].disabled
+			and Party.block_reason == "match_running" and Party.block_left() > 120 and Party.block_left() <= 130,
+			"leaving while the result was not sent yet still reports it; a late live answer for that match stays idle but blocks matching until it ends")
+		Party._take({"party": {"quests": Party.view.get("quests", {}), "queue": {"state": "idle"}, "block": null}})
+		await _frames(2)
+		_check(Party.block_left() == 0 and not view.buttons["start:lich"].disabled, "when the left match ends the block lifts and start is on")
+		Party._take({"party": {"quests": Party.view.get("quests", {}), "queue": {"state": "idle"}, "block": {"reason": "leave_penalty", "left": 600}}})
+		await _frames(2)
+		var why := Party.queue_block("lich", 1, "hans", [])
+		_check(view.buttons["start:lich"].disabled and "10:00" in why, "a leave penalty from the server turns start off and shows the time left: " + why)
+		Party._take({"party": {"quests": Party.view.get("quests", {}), "queue": {"state": "idle"}, "block": null}})
 	Party.set_auto_accept(false)
 
 

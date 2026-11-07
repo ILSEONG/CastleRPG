@@ -272,7 +272,9 @@ func _on_leave() -> void:
 	_armed = ARM_SEC
 	_armed_ms = Time.get_ticks_msec()
 	leave_button.text = Lang.t("party_hud.on_leave")
-	flash(Lang.t("party_hud.on_leave_2"), ARM_SEC)
+	# 다른 성주(사람)가 함께 싸우는 판: 나가면 그 판이 끝날 때까지 다시 매칭할 수 없고, 자주 나가면 매칭이 제한된다(2026-11-07)
+	var others: bool = battle.seats.any(func(st): return not st.get("bot", false) and not st.get("me", false))
+	flash(Lang.t("party_hud.on_leave_3") if others else Lang.t("party_hud.on_leave_2"), ARM_SEC + (1.5 if others else 0.0))
 
 
 func refresh() -> void:

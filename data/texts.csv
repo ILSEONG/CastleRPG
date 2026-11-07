@@ -2926,3 +2926,10 @@ party_battle.boss_line_4,죽음의 장막! 푸른 원 안으로 피하세요,,,,
 party_battle.boss_line_5,영혼 폭풍! 리치 곁으로 파고드세요,,,,scripts/party_battle.gd
 party_battle.boss_line_6,산성 홍수! 푸른 원 안으로 피하세요,,,,scripts/party_battle.gd
 party_battle.boss_line_7,독 줄기! 줄 사이 틈으로 비키세요,,,,scripts/party_battle.gd
+party.error_text.match_running,나간 판이 아직 진행 중입니다. 그 판이 끝나면 다시 매칭할 수 있습니다,,,,scripts/party.gd
+party.error_text.leave_penalty,파티 던전을 자주 나가 잠시 매칭이 제한되었습니다,,,,scripts/party.gd
+party.error_text.member_running,파티원 중 나간 판이 아직 진행 중인 성주가 있습니다,,,,scripts/party.gd
+party.error_text.member_penalty,파티원 중 매칭이 제한된 성주가 있습니다,,,,scripts/party.gd
+party.queue_block_6,파티 던전을 자주 나가 %s 동안 매칭할 수 없습니다,,,,scripts/party.gd
+party.queue_block_7,나간 판이 끝나면 다시 매칭할 수 있습니다 (%s),,,,scripts/party.gd
+party_hud.on_leave_3,"한 번 더 누르면 포기합니다(패배)\n판이 끝날 때까지 다시 매칭할 수 없고, 자주 나가면 매칭이 제한됩니다",,,,scripts/party_hud.gd

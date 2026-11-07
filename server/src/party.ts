@@ -36,6 +36,13 @@ export const DROP_WEIGHTS: number[][] = [
 export const CONFIRM_SEC = 15 // [입장 수락] 제한 시간
 export const BOT_WAIT_SEC = 30 // 이만큼 기다리면 빈 자리를 AI 성주가 채운다
 export const QUEUE_STALE_SEC = 12 // 대기 중 이만큼 상태를 묻지 않으면(앱을 껐다) 대기열에서 뺀다
+// 탈주(2026-11-07 사용자): 다른 성주(사람)가 남아 싸우는 판을 중간에 나가면 그 판이 끝날 때까지 다시 매칭할 수 없다(LEFT_SLACK_SEC = 제한 시간 뒤 여유).
+// 24시간 안에 나간 횟수가 LEAVE_FREE번을 넘으면 매칭 제한: 넘은 첫 번째부터 LEAVE_BAN_MIN분(마지막 값에서 멈춘다) — 롤·오버워치의 탈주 제재처럼 점점 길게.
+export const LEFT_SLACK_SEC = 10
+export const LEAVE_WINDOW_SEC = 86400
+export const LEAVE_FREE = 2
+export const LEAVE_BAN_MIN = [10, 30, 60]
+export const leaveBanSec = (leaves: number) => leaves <= LEAVE_FREE ? 0 : LEAVE_BAN_MIN[Math.min(leaves - LEAVE_FREE, LEAVE_BAN_MIN.length) - 1] * 60
 export const MATCH_TTL_SEC = 1800 // 끝나지 않은 매치는 이만큼 뒤 지운다
 // 파티 코드(사용자 2026-10-15 "파티코드 있어서 파티를 구성할수잇어"): [파티 만들기] → 코드 → 다른 성주가 [코드로 참가]. 방장이 [매칭 시작]을 누르면
 // 파티원이 한 묶음으로 대기열에 들어가 같은 매치에 앉고, 빈자리는 무작위 매칭 → BOT_WAIT_SEC 뒤 AI 성주(Claude 기본값).
@@ -116,6 +123,23 @@ export class PartyHub {
   matchOf(pid: string): Match | null {
     for (const m of this.matches.values()) if (m.seats.some((s) => s.pid === pid && !s.left)) return m
     return null
+  }
+
+  // 내가 앉았던(중간에 나왔거나 아직 앉은) 판이 진행 중이면(다른 사람이 남아 있고 결과 전, 제한 시간 + 여유 안) 끝날 때까지 남은 초, 아니면 0.
+  runningLeft(pid: string, now: number): number {
+    for (const m of this.matches.values()) {
+      if (m.state !== 'live' || m.result || !m.seats.some((s) => s.pid === pid)) continue
+      if (!m.seats.some((s) => s.pid && s.pid !== pid && !s.left)) continue
+      const left = Math.ceil(m.started + TIME_LIMIT[m.quest] + LEFT_SLACK_SEC - now)
+      if (left > 0) return left
+    }
+    return 0
+  }
+
+  // 지금 나가면 탈주인가: 결과 전 진행 중인 판이고 다른 사람이 남아 있다.
+  isLeaving(pid: string): boolean {
+    const m = this.matchOf(pid)
+    return !!m && m.state === 'live' && !m.result && m.seats.some((s) => s.pid && s.pid !== pid && !s.left)
   }
 
   // 판을 끝냈다(결과를 보냈다)·새로 대기열에 들어간다: 그 매치에서 놓아준다. 사람이 모두 나간 매치는 지운다.

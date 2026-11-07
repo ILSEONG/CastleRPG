@@ -122,9 +122,29 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     return { code: l.code, quest: l.quest, diff: l.diff, leader: l.leader === x.id, size: PQ.SEATS[l.quest],
       members: l.members.map((m) => ({ ...seatView(m.seat, x.id), leader: m.seat.pid === l.leader })) }
   }
+  // 매칭을 막는 까닭: 중간에 나온 판이 아직 진행 중(match_running) 또는 탈주 제한(leave_penalty). {reason, left(초)} 또는 null.
+  // 탈주 기록 표(071)가 아직 없으면(마이그레이션 전) 제한 없음으로 본다.
+  async function blockOf(pid: string, now: number): Promise<{ reason: string; left: number } | null> {
+    const run = hub.runningLeft(pid, now)
+    if (run > 0) return { reason: 'match_running', left: run }
+    let rows: Any[] = []
+    try {
+      rows = await query(`select extract(epoch from at)::float8 as at from party_leaves where player_id = $1 and at > to_timestamp($2::float8) order by at desc`,
+        [pid, now - PQ.LEAVE_WINDOW_SEC])
+    } catch (e) {
+      if ((e as { code?: string }).code !== '42P01') throw e
+    }
+    const ban = PQ.leaveBanSec(rows.length)
+    const left = ban > 0 ? Math.ceil(Number(rows[0].at) + ban - now) : 0
+    return left > 0 ? { reason: 'leave_penalty', left } : null
+  }
+  const blockError = (b: { reason: string; left: number }, who = 'you') => blocked(b.reason, b.reason === 'match_running'
+    ? `${who} left a party match that is still going (${b.left} s left)` : `${who} left party matches too often (${b.left} s left)`)
+
   const view = async (x: Any) => {
     const queue = await myState(x)
-    return { server_now: x.now, party: { quests: await stats(x), queue, lobby: lobbyView(x) } }
+    const block = queue.state === 'idle' ? await blockOf(x.id, x.now) : null
+    return { server_now: x.now, party: { quests: await stats(x), queue, lobby: lobbyView(x), block } }
   }
 
   app.get('/v1/party', auth, async (c) => c.json(await view(await ctx(c))))
@@ -198,6 +218,8 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     if (diff > st.best + 1) throw blocked('locked', `difficulty ${diff} is locked (best ${st.best})`)
     if (hub.lobbyOf(x.id)) throw blocked('in_lobby', 'leave your party first (the party leader starts matching)')
     const seat = await seatFor(x, quest, b)
+    const blk = await blockOf(x.id, x.now)  // 다른 성주가 싸우는 판을 두고 새로 매칭하는 것도 막는다
+    if (blk) throw blockError(blk)
     if (!hub.join(seat, quest, diff, x.now)) throw blocked('in_match', 'you are already in a party match')
     botsNow(x)
     return c.json(await view(x))
@@ -268,6 +290,10 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     const best = new Map(rows.map((r: Any) => [r.id, Number(r.best)]))
     const stuck = l.members.find((m) => diff > (best.get(m.seat.pid!) ?? 0) + 1)
     if (stuck) throw blocked('member_locked', `${stuck.seat.name} has not cleared the previous difficulty`)
+    for (const m of l.members) {  // 탈주 제한·진행 중인 판이 있는 파티원이 있으면 시작하지 않는다
+      const blk = await blockOf(m.seat.pid!, x.now)
+      if (blk) throw blockError({ reason: blk.reason === 'match_running' ? 'member_running' : 'member_penalty', left: blk.left }, m.seat.name)
+    }
     const r = hub.startLobby(x.id, diff, x.now)
     if (typeof r === 'string') throw lobbyFail(r)
     botsNow(x)
@@ -421,7 +447,16 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       [runId, x.id, quest, win, Number(run.diff), x.today, x.now, JSON.stringify(item ? [item] : []),
         JSON.stringify({ run_id: runId, quest, diff: Number(run.diff) }), b.win])
     }
-    if (hub.matches.get(run.match_id)?.seats.some((s) => s.pid === x.id && !s.left)) hub.release(x.id) // 끝낸 판에서 놓아준다(다음 매칭)
+    if (hub.matches.get(run.match_id)?.seats.some((s) => s.pid === x.id && !s.left)) {
+      if (hub.isLeaving(x.id)) {  // 다른 성주가 남아 싸우는 판을 결과 전에 나갔다 — 탈주 기록(표가 아직 없으면 넘어간다)
+        try {
+          await query('insert into party_leaves (player_id, at) values ($1, to_timestamp($2::float8))', [x.id, x.now])
+        } catch (e) {
+          if ((e as { code?: string }).code !== '42P01') throw e
+        }
+      }
+      hub.release(x.id) // 끝낸 판에서 놓아준다(다음 매칭)
+    }
     const [done] = await query('select result from party_runs where id = $1', [runId])
     const pl2 = await loadPlayer(x.id, x.game, x.now)
     return c.json({ ...playerView(pl2, x.game, x.now), ...(await view({ ...x, pl: pl2 })), result: json(done.result) }) // 플레이어 응답(보관함) + party + 결과
