@@ -133,6 +133,7 @@ func _ready() -> void:
 	body.add_child(_section(Lang.t("settings_panel.ready_13")))
 	rename_button = _slot_button(Lang.t("settings_panel.ready_29"))  # 닉네임 변경(2026-11-05): 첫 번은 무료, 그 뒤는 다이아(nickname_panel.gd)
 	rename_button.pressed.connect(open_rename)
+	Tutorial.register_ui("settings:rename", rename_button, func(): return is_instance_valid(rename_button) and rename_button.visible)  # 가이드 「닉네임 바꾸기」 화살표
 	name_label = _info_row(Lang.t("settings_panel.ready_14"), rename_button)
 	copy_button = _slot_button(Lang.t("settings_panel.ready_16"))
 	copy_button.pressed.connect(copy_code)

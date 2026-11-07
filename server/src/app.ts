@@ -2219,7 +2219,7 @@ export function createApp(opts: AppOptions) {
           soldierDeployed: Object.values(p.soldier_deploy).reduce((a, n) => a + (Number(n) || 0), 0),
           research: p.research_cur !== null || Object.keys(p.research).length > 0, guild: facts.guild, pvp: facts.pvp, party: facts.party, admin: p.admin, c: m.c,
           step: num, attendN: p.attend.n, pouchesLeft: Object.values(p.pouches).reduce((a, n) => a + (Number(n) || 0), 0),
-          shopFreeToday: (SH.normalize(p.shop, today(g, now)).d['d_free'] ?? 0) > 0, promoted: Object.values(p.heroes).some((h) => h.copies > 0 && h.promotion > 0),
+          shopFreeToday: (SH.normalize(p.shop, today(g, now)).d['d_free'] ?? 0) > 0, promoted: Object.values(p.heroes).some((h) => h.copies > 0 && h.promotion > 0), nicknameChanged: Number(p.nickname_changes ?? 0) > 0,
         })
         if (!done) throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
         reward = R.parseReward(def.reward) ?? {}

@@ -19,7 +19,7 @@ const GuideTours := preload("res://scripts/guide_tours.gd")
 const GameLog := preload("res://scripts/game_log.gd")
 const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
-const SAVE_VERSION := 12  # 12: 2026-11-04 처치 30마리·영웅 모집 4개 추가(138개, map_v11).  2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
+const SAVE_VERSION := 13  # 13: 2026-11-07 25번에 닉네임 바꾸기(139개, map_v12). 12: 2026-11-04 처치 30마리·영웅 모집 4개 추가(138개, map_v11).  2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
 ## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
 ## 5: 길드 출석·기부, 길드 보스, 공성전 체험, 거래소 둘러보기 미션(2026-10-13 오후)이 끼었다
 ## 6: 초반 단순화(2026-10-23) — 첫 전투(1-1)가 1번이 되고 앞부분 순서가 바뀌었다. 성채 살펴보기·몬스터 30마리가 빠지고 채석장·농장은 한 미션
@@ -260,6 +260,9 @@ static var KEY_MISSIONS := [
 		"reward": {"diamonds": 50}},
 	{"id": "hero_lv4_20", "title": Lang.t("tutorial.missions.hero_lv4_20.title"), "desc": Lang.t("tutorial.missions.hero_lv4_20.desc"),
 		"kind": "hero_lv", "arg": [4, 20], "goto": "tab:hero", "reward": {"gold": 9000}},
+	# 닉네임 바꾸기(사용자 2026-11-07 "가이드 중에 이름 바꾸기 없으면 추가해줘"): 설정 창 닉네임 줄 [변경] — 첫 변경은 무료(nickname_panel.gd)
+	{"id": "nickname", "title": Lang.t("tutorial.missions.nickname.title"), "desc": Lang.t("tutorial.missions.nickname.desc"),
+		"kind": "nickname", "goto": "tab:settings", "point": ["settings:rename", "menu:settings", "menu"], "reward": {"diamonds": 50}},
 	{"id": "promote", "title": Lang.t("tutorial.missions.promote.title"), "desc": Lang.t("tutorial.missions.promote.desc"),
 		"kind": "promote", "goto": "tab:hero", "point": ["hero:promote", "hero:promote_all", "tab:hero"], "reward": {"diamonds": 50}},
 	{"id": "guild_boss", "title": Lang.t("tutorial.missions.guild_boss.title"), "desc": Lang.t("tutorial.missions.guild_boss.desc"),
@@ -295,6 +298,21 @@ const V11_IDS := ["stage_1_1", "kill_10", "hero_level", "stage_1_2", "growth", "
 	"aspd_10", "kill_120_2", "archery_2", "gacha_10_6", "crit_rate_10", "dungeon_equip_3", "lab_3", "crit_dmg_10", "kill_130_2", "stable_2", "mspd_15",
 	"archery_3", "stage_1_14", "dungeon_gold_4", "aspd_15", "pvp", "kill_140_3", "stable_3", "fever", "crit_rate_15", "stage_1_15", "exchange_look",
 	"kill_150_2", "crit_dmg_15", "party_clear"]
+## 2026-11-04 판(138개) 순서 — 버전 12 저장을 옮길 때(map_v12) 쓴다
+const V12_IDS := ["stage_1_1", "kill_30_2", "hero_level", "stage_1_2", "growth", "stage_1_3", "speed_on", "atk_5", "kill_30_3", "auto_on",
+	"hero_lv4_5", "hp_5", "build_lumber", "atk_10", "build_quarry_farm", "kill_30", "collect", "stage_1_4", "sell", "hero_lv4_10", "attend", "hp_10",
+	"pouch", "kill_30_4", "atk_15", "mission_claim", "hp_15", "shop_free", "stage_1_5", "build_tavern", "kill_30_5", "gacha", "mspd_5", "deploy_new",
+	"gacha_10_1", "auto_deploy", "gacha_10_2", "build_barracks", "kill_30_6", "train", "stage_1_6", "build_houses", "hero_lv4_15", "dungeon_gold",
+	"keep_2", "dungeon_equip", "lumber_2", "gacha_10_7", "kill_30_7", "dungeon_ticket", "farm_2", "equip", "dungeon_gold_2", "quarry_2",
+	"soldier_deploy", "dwin_gold_1", "houses_2", "dwin_equip_1", "gacha_10_8", "stage_1_7", "build_lab", "dungeon_equip_2", "research",
+	"dungeon_ticket_2", "build_archery", "stage_1_8", "barracks_2", "dwin_gold_2", "build_stable", "gacha_10_9", "kill_30_8", "aspd_5", "stage_1_9",
+	"guild", "gate_2", "guild_attend", "stage_1_10", "dwin_equip_2", "kill_30_9", "keep_3", "gacha_10_3", "atk_20", "dwin_ticket_1", "promote",
+	"lumber_3", "dwin_ticket_2", "hp_20", "kill_30_10", "dungeon_gold_3", "crit_rate_5", "stage_1_11", "guild_boss", "farm_3", "dwin_gold_3",
+	"gacha_10_4", "dwin_equip_3", "quarry_3", "kill_30_11", "crit_dmg_5", "barracks_3", "stage_1_12", "houses_3", "atk_25", "kill_30_12", "siege_try",
+	"gacha_10_5", "hp_25", "gate_3", "mspd_10", "hero_lv4_20", "lab_2", "stage_1_13", "aspd_10", "kill_30_13", "archery_2", "gacha_10_6",
+	"crit_rate_10", "dungeon_equip_3", "lab_3", "crit_dmg_10", "kill_30_14", "stable_2", "mspd_15", "archery_3", "stage_1_14", "dungeon_gold_4",
+	"gacha_10_10", "aspd_15", "pvp", "kill_30_15", "stable_3", "fever", "crit_rate_15", "stage_1_15", "exchange_look", "kill_30_16", "crit_dmg_15",
+	"party_clear"]
 ## 가이드 순서(사용자 2026-11-03 "가이드 퀘스트 메이플 키우기 보면서 전체 다시 만들어 / 무슨 퀘스트 하나 3개가 연달아 저따구로 짰어", 같은 날 저녁
 ## "가이드 퀘스트 너무 찌질하게 레벨 하나 업그레이드 이래, 업그레이드 배수를 5로 책정해"): 메이플스토리 키우기 가이드처럼 짧은 퀘스트가 종류를 바꿔
 ## 가며 돈다. 규칙(테스트가 지킨다):
@@ -309,7 +327,7 @@ const V11_IDS := ["stage_1_1", "kill_10", "hero_level", "stage_1_2", "growth", "
 const ORDER := [
 	"stage_1_1", "kill_30_2", "hero_level", "stage_1_2", "growth", "stage_1_3", "speed_on", "atk_5", "kill_30_3", "auto_on",  # 1~10
 	"hero_lv4_5", "hp_5", "build_lumber", "atk_10", "build_quarry_farm", "kill_30", "collect", "stage_1_4", "sell", "hero_lv4_10",  # 11~20
-	"attend", "hp_10", "pouch", "kill_30_4", "atk_15", "mission_claim", "hp_15", "shop_free", "stage_1_5", "build_tavern",  # 21~30
+	"attend", "hp_10", "pouch", "kill_30_4", "nickname", "atk_15", "mission_claim", "hp_15", "shop_free", "stage_1_5", "build_tavern",  # 21~30
 	"kill_30_5", "gacha", "mspd_5", "deploy_new", "gacha_10_1", "auto_deploy", "gacha_10_2", "build_barracks", "kill_30_6", "train",  # 31~40
 	"stage_1_6", "build_houses", "hero_lv4_15", "dungeon_gold", "keep_2", "dungeon_equip", "lumber_2", "gacha_10_7", "kill_30_7", "dungeon_ticket", "farm_2",  # 41~50
 	"equip", "dungeon_gold_2", "quarry_2", "soldier_deploy", "dwin_gold_1", "houses_2", "dwin_equip_1", "gacha_10_8", "stage_1_7", "build_lab", "dungeon_equip_2",  # 51~60
@@ -1453,6 +1471,8 @@ func _done(m: Dictionary) -> bool:
 			return count >= 1
 		"party":  # 파티 던전을 한 번 이겼다(어느 쪽이든 — 쉬움 이상 최고 기록이 있으면 통과)
 			return count >= 1 or (party != null and party.has_method("best") and (int(party.best("lich")) >= 1 or int(party.best("spider")) >= 1))
+		"nickname":  # 닉네임을 한 번이라도 바꿨다(서버 nickname.changes — 이미 바꾼 성주는 바로 통과)
+			return count >= 1 or (econ.get("nickname") is Dictionary and int(econ.nickname.get("changes", 0)) > 0)
 		"promote":  # 승급했다(이미 승급한 영웅이 있어도 통과)
 			return count >= 1 or econ.hero_promotions.values().any(func(v): return int(v) > 0)
 		"hero_lv":
@@ -1566,6 +1586,13 @@ static func map_v7(old: int) -> int:
 ## 버전 10 단계(V10_IDS 번호 — 8·9·10은 같은 번호) → 지금 표 번호(2026-11-03 레벨 목표 5 단위): 그 앞 미션 중 기능·행동 미션(PATH_KINDS·건물 레벨업·
 ## 사이 던전·사이 모집이 아닌 것과 첫 1-1)이 지금 표에서 가장 뒤에 있는 것의 다음. 이미 연 기능은 열린 채, 다 끝냈으면 지금 표 크기. 서버 migrations/064가 같은 표.
 ## 버전 11 저장(134개 판)의 단계 → 지금 ORDER: 같은 퀘스트 자리(사이에 영웅 모집이 끼었을 뿐, 처치는 KILL_WAS로 이름만 바뀌었다).
+## 버전 12 저장(138개 판)의 단계 → 지금 ORDER: 같은 퀘스트 자리(25번에 닉네임 바꾸기가 끼었을 뿐).
+static func map_v12(old: int) -> int:
+	if old >= V12_IDS.size():
+		return MISSIONS.size()
+	return ORDER.find(V12_IDS[maxi(0, old)])
+
+
 static func map_v11(old: int) -> int:
 	if old >= V11_IDS.size():
 		return MISSIONS.size()
@@ -1637,6 +1664,8 @@ func load_save() -> bool:
 		old_step = map_v10(old_step)  # 위의 옮김은 모두 버전 8~10 번호(V10_IDS)를 낸다 — map_v10은 지금 ORDER 번호를 낸다
 	elif ver < 12:
 		old_step = map_v11(old_step)  # 같은 퀘스트 그대로(진행 수도 그대로)
+	elif ver < 13:
+		old_step = map_v12(old_step)  # 같은 퀘스트 그대로(진행 수도 그대로)
 	step = clampi(old_step, 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0))) if ver >= 11 else 0  # 9·10·11: 같은 번호의 칸이 다른 퀘스트가 됐을 수 있다 — 진행 수는 새로
 	best_stage = maxi(1, int(d.get("best_stage", 1)))

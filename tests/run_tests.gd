@@ -5541,7 +5541,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 퀘스트 50 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 퀘스트 51 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5561,13 +5561,13 @@ func test_tutorial() -> void:
 			blocks.append(before and not at and not t.build_locked(bid))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 퀘스트 30 「주점 건설」에서 건설할 수 있습니다"
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 퀘스트 31 「주점 건설」에서 건설할 수 있습니다"
 		and t.tab_lock_text("hero") == "가이드 퀘스트 3 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 메이플스토리 키우기식 간격(사용자 2026-10-29 "너무 급박하게 컨텐츠를 너무 빨리 푸는거같아 메이플 키우기 좀 참고하라고"): 기능이 처음 열리는
 	# 미션이 메이플 가이드 퀘스트 번호 근처(성장 8 = 스킬 8, 건설 25 = 스킬 강화 25, 주점 58 = 월드 보스 58, 골드 던전 79 = 영웅의 힘 79, 길드 140,
 	# PVP 247 = 아레나 247), 그 사이는 사이 퀘스트(돌파·처치·영웅·능력치·던전 단계)
-	var at := {"hero_level": 3, "growth": 5, "speed_on": 7, "auto_on": 10, "build_lumber": 13, "sell": 19, "attend": 21, "pouch": 23, "mission_claim": 26, "shop_free": 28, "build_tavern": 30, "build_barracks": 38, "build_houses": 42, "dungeon_gold": 44, "dungeon_equip": 46, "dungeon_ticket": 50, "soldier_deploy": 55, "build_lab": 61, "build_archery": 65, "build_stable": 69, "guild": 74, "promote": 84, "guild_boss": 92, "siege_try": 105, "pvp": 129, "fever": 132, "exchange_look": 135, "party_clear": 138}
+	var at := {"hero_level": 3, "growth": 5, "speed_on": 7, "auto_on": 10, "build_lumber": 13, "sell": 19, "attend": 21, "nickname": 25, "pouch": 23, "mission_claim": 27, "shop_free": 29, "build_tavern": 31, "build_barracks": 39, "build_houses": 43, "dungeon_gold": 45, "dungeon_equip": 47, "dungeon_ticket": 51, "soldier_deploy": 56, "build_lab": 62, "build_archery": 66, "build_stable": 70, "guild": 75, "promote": 85, "guild_boss": 93, "siege_try": 106, "pvp": 130, "fever": 133, "exchange_look": 136, "party_clear": 139}
 	var off := []
 	for id in at:
 		if t.mission_index(id) + 1 != int(at[id]):
@@ -5576,9 +5576,9 @@ func test_tutorial() -> void:
 	var uniq := {}
 	for id in ids:
 		uniq[id] = true
-	check(TutorialScript.MISSIONS.size() == 138 and off.is_empty() and uniq.size() == ids.size()
+	check(TutorialScript.MISSIONS.size() == 139 and off.is_empty() and uniq.size() == ids.size()
 		and TutorialScript.KEY_MISSIONS.all(func(m): return m.id in ids or m.id in TutorialScript.KILL_WAS.values()),
-		"guide: features open in the MapleStory Idle-like order, scaled to the 5-step guide (138 quests): %s" % [off])
+		"guide: features open in the MapleStory Idle-like order, scaled to the 5-step guide (139 quests): %s" % [off])
 	# 사이 퀘스트는 이름에서 만든다: 제목·종류·목표·보상
 	var fk: Dictionary = TutorialScript.MISSIONS[t.mission_index("kill_30_2")]  # 예전 kill_10 자리 — 30마리, 보상은 그대로
 	var fs: Dictionary = TutorialScript.MISSIONS[t.mission_index("stage_1_8")]
@@ -5711,7 +5711,7 @@ func test_tutorial() -> void:
 		"guide: stat Lv 5 completes with its own gold; the next stat quests cost 5 levels (HP 0 -> 5, attack 5 -> 10)")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 퀘스트 129 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 퀘스트 130 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5772,6 +5772,10 @@ func test_tutorial() -> void:
 		and TutorialScript.map_v11(v11.call("kill_100")) == t.mission_index("kill_30_10") and TutorialScript.map_v11(v11.call("party_clear")) == t.mission_index("party_clear")
 		and TutorialScript.map_v11(134) == TutorialScript.MISSIONS.size() and TutorialScript.MISSIONS[t.mission_index("gacha_10_7") - 1].id == "lumber_2",
 		"guide: v11 steps stay on the same quest (4 recruit quests inserted, kills renamed kill_30_<n>)")
+	var v12 := func(id): return TutorialScript.V12_IDS.find(id)
+	check(TutorialScript.map_v12(0) == 0 and TutorialScript.map_v12(v12.call("kill_30_4")) == t.mission_index("kill_30_4")
+		and TutorialScript.map_v12(v12.call("kill_30_4") + 1) == t.mission_index("nickname") + 1 and TutorialScript.map_v12(138) == TutorialScript.MISSIONS.size(),
+		"guide: v12 steps stay on the same quest (nickname inserted at 25)")
 	t7.free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(tut_v7))
 	# 길드·거래소·공성전 체험: 공성전은 체험 끝, 길드 보스는 도전, 거래소는 창을 열면 끝난다. 거래소는 그 미션에서 열린다
@@ -5827,6 +5831,16 @@ func test_tutorial() -> void:
 		var before: bool = t.complete()
 		t.note(id)
 		check(t.complete(), "guide: %s completes on its action (before %s)" % [id, before])
+	# 닉네임 바꾸기(2026-11-07): 서버 nickname.changes가 1 이상이면 끝(첫 변경 무료), 화살표는 설정 창 [변경] → [설정] → [메뉴]
+	var nick_was = t.econ.nickname
+	t.step = t.mission_index("nickname")
+	t.count = 0
+	t.econ.nickname = {"name": "성주", "changes": 0, "price": 0, "cost": 300}
+	var nick_wait: bool = not t.complete()
+	t.econ.nickname = {"name": "새이름", "changes": 1, "price": 300, "cost": 300}
+	check(nick_wait and t.complete() and t.point_keys(t.mission()) == ["settings:rename", "menu:settings", "menu"] and t.reward(t.step).get("diamonds") == 500,
+		"guide: nickname quest waits for the first nickname change, points at settings [변경], pays 500 diamonds")
+	t.econ.nickname = nick_was
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30_10")
 	t.count = 0

@@ -2269,6 +2269,8 @@ tutorial.missions.hp_16.title,체력 Lv 16 달성,,,,scripts/tutorial.gd
 tutorial.missions.hp_16.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_20.title,영웅 4명 Lv 20 달성,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_20.desc,"[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 승급 전 최대 레벨은 Lv 50이며, 더 올리는 방법은 다음 승급 퀘스트에서 안내합니다.",,,,scripts/tutorial.gd
+tutorial.missions.nickname.title,닉네임 바꾸기,,,,scripts/tutorial.gd
+tutorial.missions.nickname.desc,[메뉴] → [설정]의 닉네임 줄에서 [변경]을 눌러 성주 이름을 정해 보세요. 첫 변경은 무료입니다.,,,,scripts/tutorial.gd
 tutorial.missions.promote.title,영웅 승급하기,,,,scripts/tutorial.gd
 tutorial.missions.promote.desc,"영웅은 최대 레벨에 닿으면 더 오르지 않습니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",,,,scripts/tutorial.gd
 tutorial.missions.guild_boss.title,길드 보스 도전,,,,scripts/tutorial.gd

@@ -275,6 +275,14 @@ test('가이드 퀘스트: 받은 뒤부터 센다(c.gq), 던전 종류, 서버�
   assert.equal((await tryClaim(pr)).json.error, 'not_done')
   await S.db.query('update player_heroes set promotion = 1 where player_id = $1 and copies > 0', [id])
   assert.equal((await tryClaim(pr)).status, 200)
+  // 닉네임 바꾸기(2026-11-07): 한 번이라도 바꿨어야
+  const nk = rows.findIndex((x) => x.id === 'nickname')
+  assert.ok(nk > 0)
+  await startAt(nk)
+  await S.db.query('update players set nickname_changes = 0 where id = $1', [id])
+  assert.equal((await tryClaim(nk)).json.error, 'not_done')
+  await S.db.query('update players set nickname_changes = 1 where id = $1', [id])
+  assert.equal((await tryClaim(nk)).status, 200)
   // 이 기능 전에 시작한 퀘스트(c.gq 번호가 다름): 예전처럼 누적 — 진행 중인 성주가 막히지 않는다
   const k2 = rows.findIndex((x) => x.id === 'kill_30_3')
   await at(k2)
