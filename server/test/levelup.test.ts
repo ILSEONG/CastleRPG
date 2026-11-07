@@ -1,4 +1,4 @@
-// 영웅 레벨업(개정 11 §2.1·§2.2): 비용 표(1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45))) 반올림, 골드만 — 개정 12), count 합계, 최대 레벨(승급 반영 — 개정 15), 404·409·400, 응답 형식, 로그.
+// 영웅 레벨업(개정 11 §2.1·§2.2): 비용 표(1.024^(L−1) × e^(4.8 × (1 − e^(−(L−1)/20))) 반올림, 골드만 — 개정 12), count 합계, 최대 레벨(승급 반영 — 개정 15), 404·409·400, 응답 형식, 로그.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as R from '../src/rules.ts'
@@ -26,15 +26,15 @@ const setHero = (id: string, hero: string, promotion: number, level: number) =>
 const levelup = (token: string, body: unknown) => S.req('POST', '/v1/hero/levelup', { token, body })
 const logs = async (id: string) => S.db.query("select detail from economy_log where player_id = $1 and kind = 'levelup' order by id", [id])
 
-test('비용 표: 골드 = min(round(등급 값 × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))), 10분 상한), 식량 없음. count는 합계. 최대 레벨: 목록이 있으면 그 값, 없으면 20 + 10 × 승급', () => {
+test('비용 표: 골드 = round(등급 값 × 1.024^(L−1) × e^(4.8 × (1 − e^(−(L−1)/20)))), 식량 없음. count는 합계. 최대 레벨: 목록이 있으면 그 값, 없으면 20 + 10 × 승급', () => {
   const one = (g: string, l: number) => R.levelupCost(g, l, 1, CFG)
-  assert.deepEqual([1, 2, 3, 4, 5, 10, 19, 20].map((l) => one('R', l).gold), [30, 37, 46, 57, 70, 184, 861, 1008])
-  assert.deepEqual([1, 2, 3, 10, 19].map((l) => one('SR', l).gold), [60, 75, 92, 368, 1723])
-  assert.deepEqual([1, 2, 3, 10, 19, 69].map((l) => one('SSR', l).gold), [120, 149, 184, 736, 3446, 28649])
-  assert.deepEqual(R.levelupCost('R', 1, 5, CFG), { gold: 30 + 37 + 46 + 57 + 70 })
-  assert.deepEqual(R.levelupCost('SSR', 1, 19, CFG), { gold: 21060 })
-  // 2026-11-07 10분 상한: 앱 run_tests와 같은 합계(SSR 값 240, 1 → 300)
-  assert.deepEqual(R.levelupCost('SSR', 1, 299, { ...CFG, levelup_gold_SSR: '240' }), { gold: 104177740 })
+  assert.deepEqual([1, 2, 3, 4, 5, 10, 19, 20].map((l) => one('R', l).gold), [30, 39, 50, 63, 79, 211, 794, 894])
+  assert.deepEqual([1, 2, 3, 10, 19].map((l) => one('SR', l).gold), [60, 78, 99, 423, 1587])
+  assert.deepEqual([1, 2, 3, 10, 19, 69].map((l) => one('SSR', l).gold), [120, 155, 199, 846, 3174, 62319])
+  assert.deepEqual(R.levelupCost('R', 1, 5, CFG), { gold: 30 + 39 + 50 + 63 + 79 })
+  assert.deepEqual(R.levelupCost('SSR', 1, 19, CFG), { gold: 21727 })
+  // 2026-11-07 곡선: 앱 run_tests와 같은 합계(SSR 값 240, 1 → 300)
+  assert.deepEqual(R.levelupCost('SSR', 1, 299, { ...CFG, levelup_gold_SSR: '240' }), { gold: 1455457612 })
   assert.deepEqual([0, 1, 2, 5].map((p) => R.heroMaxLevel(p, CFG)), [20, 30, 40, 70])
   assert.deepEqual([0, 1, 2, 5].map((p) => R.heroMaxLevel(p, { ...CFG, hero_max_levels: '20|50|80|120|160|200' })), [20, 50, 80, 200])
 })
@@ -48,13 +48,13 @@ test('레벨업 1회·3회: 골드(tenths × 10)만 정확히 빼고(식량은 �
   assert.equal(r.json.level, 2)
   assert.deepEqual([r.json.player.gold_tenths, r.json.player.res.food, r.json.player.heroes.hans], [5005 - 600, 200, { copies: 1, level: 2, shards: 0, promotion: 0 }])
   assert.deepEqual(r.json.player.heroes.ella, { copies: 1, level: 1, shards: 0, promotion: 0 })
-  r = await levelup(token, { hero_id: 'hans', count: 3 }) // 2→5: 75 + 92 + 114 골드(실제 config: R 60)
-  assert.deepEqual([r.status, r.json.level, r.json.player.gold_tenths, r.json.player.res.food], [200, 5, 4405 - 2810, 200])
+  r = await levelup(token, { hero_id: 'hans', count: 3 }) // 2→5: 78 + 99 + 126 골드(실제 config: R 60)
+  assert.deepEqual([r.status, r.json.level, r.json.player.gold_tenths, r.json.player.res.food], [200, 5, 4405 - 3030, 200])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([p.heroes.hans, p.gold_tenths, p.res.food], [{ copies: 1, level: 5, shards: 0, promotion: 0 }, 1595, 200])
+  assert.deepEqual([p.heroes.hans, p.gold_tenths, p.res.food], [{ copies: 1, level: 5, shards: 0, promotion: 0 }, 1375, 200])
   const l = await logs(id)
   assert.equal(l.length, 2)
-  assert.deepEqual(l[1].detail, { hero_id: 'hans', from: 2, to: 5, count: 3, gold: 281, gold_tenths: -2810 })
+  assert.deepEqual(l[1].detail, { hero_id: 'hans', from: 2, to: 5, count: 3, gold: 303, gold_tenths: -3030 })
 })
 
 test('최대 레벨: 승급 0은 50까지(넘으면 409 max_level), 승급이 오르면 상한도 오른다(승급 1 → 100)', async () => {

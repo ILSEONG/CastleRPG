@@ -565,10 +565,10 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
 
 // --- 영웅 레벨업 (개정 11 §2.1) — 앱 GameData.max_level·levelup_total과 같은 식 ---
 
-// L → L+1 골드 = round(등급 값 × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))) (2026-10-13 최대 Lv 200, 골드 수급량 기준). 앱 GameData와 같다
-export const LEVELUP_GOLD_GROWTH = 1.037
-export const LEVELUP_GOLD_BOOST = 8.2
-export const LEVELUP_GOLD_TAU = 45
+// L → L+1 골드 = round(등급 값 × 1.024^(L−1) × e^(4.8 × (1 − e^(−(L−1)/20)))) (2026-11-07 사용자: 갈수록 증가폭이 크게, SSR 1→300 14.6억). 앱 GameData와 같다
+export const LEVELUP_GOLD_GROWTH = 1.024
+export const LEVELUP_GOLD_BOOST = 4.8
+export const LEVELUP_GOLD_TAU = 20
 
 // 최대 레벨 = hero_max_levels의 승급번째(50|100|150|200|250|300, 2026-11-03). 목록이 없으면 hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 export function heroMaxLevel(promotion: number, config: Config): number {
@@ -589,32 +589,14 @@ export function promoteCost(promotion: number, config: Config): number | null {
   return v
 }
 
-// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))), 개정 12: 골드만.
+// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.024^(L−1) × e^(4.8 × (1 − e^(−(L−1)/20)))), 개정 12: 골드만.
 export function levelupCost(grade: string, level: number, count: number, config: Config) {
   const g = cfgNum(config, `levelup_gold_${grade}`)
   let gold = 0
   for (let l = level; l < level + count; l++) {
-    gold += roundHalfAway(Math.min(g * LEVELUP_GOLD_GROWTH ** (l - 1) * Math.exp(LEVELUP_GOLD_BOOST * (1 - Math.exp(-(l - 1) / LEVELUP_GOLD_TAU))), levelupCap(g, l)))
+    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** (l - 1) * Math.exp(LEVELUP_GOLD_BOOST * (1 - Math.exp(-(l - 1) / LEVELUP_GOLD_TAU))))
   }
   return { gold }
-}
-
-// 레벨업 1회 상한(2026-11-07 사용자: 영웅 1명 1레벨 = 그 레벨이 필요한 라운드 10분 처치 골드). 앱 GameData.levelup_cap과 같다.
-// 상한 = 등급 값 × (3880 / 240) × 처치 골드 배율(그 라운드). 3880 = 8라운드(10분) × 라운드 골드 485(72마리 × 5 + 보스 125).
-// 라운드 = LEVELUP_CAP_ROUNDS(레벨 → 그 레벨이 있어야 깨는 라운드, SSR 4명 시뮬레이션) 사이 직선.
-export const LEVELUP_CAP_PER_BASE = 3880 / 240
-export const LEVELUP_CAP_ROUNDS: [number, number][] = [[1, 10], [13, 20], [30, 30], [51, 40], [95, 50], [101, 60], [111, 75], [151, 100], [201, 125], [234, 150], [281, 200], [300, 230]]
-export function levelupCap(base: number, level: number): number {
-  let r = LEVELUP_CAP_ROUNDS[LEVELUP_CAP_ROUNDS.length - 1][1]
-  for (let i = 1; i < LEVELUP_CAP_ROUNDS.length; i++) {
-    const [la, ra] = LEVELUP_CAP_ROUNDS[i - 1]
-    const [lb, rb] = LEVELUP_CAP_ROUNDS[i]
-    if (level <= lb) {
-      r = ra + (rb - ra) * (Math.max(level, la) - la) / (lb - la)
-      break
-    }
-  }
-  return base * LEVELUP_CAP_PER_BASE * (1 + GOLD_LINEAR * (r - 1)) * GOLD_GROWTH ** (r - 1)
 }
 
 // 상한을 넘는 처치는 버린다 — 싼 몬스터부터 인정하고 비싼 몬스터를 먼저 버린다(부풀린 보스 처치가 먼저 잘린다).
