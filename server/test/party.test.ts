@@ -55,32 +55,40 @@ test('party hub: 4 humans match, all must accept, decline drops only the decline
   hub.answer('c', m.id, false, 3)
   assert.equal(hub.matches.size, 0)
   assert.deepEqual(hub.queue.map((t) => t.seat.pid).sort(), ['a', 'b', 'd'], 'the decliner leaves the queue, the others go back')
-  hub.tick(4)
+  for (const id of ['a', 'b', 'd']) hub.seen(id, 4 + PQ.BOT_WAIT_SEC)
+  hub.tick(4 + PQ.BOT_WAIT_SEC)
+  assert.equal(hub.matches.size, 0, 'no AI lords (user 2026-11-07): the empty seat waits for a person')
+  hub.join(seat('h'), 'lich', 1, 4 + PQ.BOT_WAIT_SEC)
   const m2 = [...hub.matches.values()][0]
-  assert.ok(m2, 'they waited long enough: an AI lord fills the seat at once')
-  assert.equal(m2.seats.filter((s) => s.pid == null).length, 1)
-  for (const id of ['a', 'b', 'd']) hub.answer(id, m2.id, true, 5)
+  assert.ok(m2, 'a fourth person fills the seat')
+  assert.equal(m2.seats.filter((s) => s.pid == null).length, 0)
+  for (const id of ['a', 'b', 'd', 'h']) hub.answer(id, m2.id, true, 5)
   assert.equal(m2.state, 'live')
   // 수락 시간 초과: 안 누른 사람만 빠진다
   for (const id of ['e', 'f', 'g']) hub.join(seat(id), 'spider', 2, 10)
   const m3 = hub.matchOf('e')!
   hub.answer('e', m3.id, true, 11)
   hub.tick(10 + PQ.CONFIRM_SEC + 1)
-  assert.deepEqual(hub.queue.filter((t) => t.quest === 'spider').map((t) => t.seat.pid), [], 'requeued e matched again with bots')
-  assert.ok(hub.matchOf('e') && !hub.matchOf('f') && !hub.matchOf('g'))
+  assert.deepEqual(hub.queue.filter((t) => t.quest === 'spider').map((t) => t.seat.pid), ['e'], 'e waits again for people, f and g are out')
+  assert.ok(!hub.matchOf('e') && !hub.matchOf('f') && !hub.matchOf('g'))
 })
 
-test('party hub: a lone player gets AI lords after the wait, stale tickets drop', () => {
+test('party hub: a lone player never gets AI lords (only a bots seat — admin test — does), stale tickets drop', () => {
   const hub = new PQ.PartyHub(() => ({ pid: null, name: 'bot', dps: 1, power: 1, accepted: true }), () => 0.5)
   hub.join({ pid: 'solo', name: 's', dps: 5, power: 5, accepted: false }, 'lich', 1, 0)
-  for (let t = 5; t < PQ.BOT_WAIT_SEC; t += 5) {
+  for (let t = 5; t <= PQ.BOT_WAIT_SEC * 4; t += 5) {
     hub.seen('solo', t) // 앱이 대기 중 계속 묻는다
     hub.tick(t)
   }
+  assert.equal(hub.matches.size, 0, 'no AI lords for players')
+  hub.leave('solo')
+  hub.join({ pid: 'admin', name: 'a', dps: 5, power: 5, accepted: false, bots: true }, 'lich', 1, 200)
+  hub.seen('admin', 200 + PQ.BOT_WAIT_SEC - 1)
+  hub.tick(200 + PQ.BOT_WAIT_SEC - 1)
   assert.equal(hub.matches.size, 0)
-  hub.seen('solo', PQ.BOT_WAIT_SEC)
-  hub.tick(PQ.BOT_WAIT_SEC)
-  assert.equal(hub.matchOf('solo')!.seats.length, 4)
+  hub.seen('admin', 200 + PQ.BOT_WAIT_SEC)
+  hub.tick(200 + PQ.BOT_WAIT_SEC)
+  assert.equal(hub.matchOf('admin')!.seats.length, 4)
   hub.join({ pid: 'gone', name: 'g', dps: 5, power: 5, accepted: false }, 'spider', 1, 100)
   hub.tick(100 + PQ.QUEUE_STALE_SEC + 1)
   assert.equal(hub.ticketOf('gone'), null)
@@ -181,15 +189,14 @@ test('party hub: a party (code) sits together, strangers fill the rest, then AI 
   assert.deepEqual(m.seats.map((s) => s.pid).filter((p) => p !== 's1' && p !== 's2').sort(), ['lead', 'm1', 'm2'])
   assert.ok(hub.matchOf('m1') === m && hub.matchOf('m2') === m, 'party members are in the same match')
   assert.equal(m.seats.length, 4)
-  // 파티는 가득 차면 못 들어간다(리치 4명)
-  assert.ok(typeof hub.joinLobby(l.code, seat('m3'), 4) !== 'string')
-  assert.equal(hub.joinLobby(l.code, seat('m4'), 4), 'full')
+  // 파티원이 판(수락 확인·전투)에 앉아 있으면 새 사람은 못 들어간다
+  assert.equal(hub.joinLobby(l.code, seat('m3'), 4), 'busy')
   // 방장이 나가면 다음 사람이 방장, 다 나가면 파티가 없어진다
   hub.leaveLobby('lead')
   assert.equal(hub.lobbies.get(l.code)!.leader, 'm1')
   for (const p of ['m1', 'm2', 'm3']) hub.leaveLobby(p)
   assert.equal(hub.lobbies.size, 0)
-  // 혼자인 파티: 기다린 뒤 AI 성주
+  // 2명 파티(거미 3자리): AI 성주 없이 계속 기다린다 — 매칭 중에 코드(모집 초대장)로 들어온 사람은 같은 대기에 붙어 함께 앉는다
   const l2 = hub.createLobby(seat('solo'), 'spider', 1, 100) as PQ.Lobby
   hub.joinLobby(l2.code, seat('p2'), 100)
   hub.startLobby('solo', 1, 100)
@@ -197,8 +204,22 @@ test('party hub: a party (code) sits together, strangers fill the rest, then AI 
   hub.seen('solo', 100 + PQ.BOT_WAIT_SEC)
   hub.seen('p2', 100 + PQ.BOT_WAIT_SEC)
   hub.tick(100 + PQ.BOT_WAIT_SEC)
+  assert.equal(hub.matchOf('solo'), null, 'no AI lords')
+  assert.ok(hub.lobbyQueued(l2))
+  assert.ok(typeof hub.joinLobby(l2.code, seat('p3'), 101 + PQ.BOT_WAIT_SEC) !== 'string')
   const m2 = hub.matchOf('solo')!
-  assert.ok(m2 && hub.matchOf('p2') === m2 && m2.seats.filter((s) => s.pid == null).length === 1)
+  assert.ok(m2 && hub.matchOf('p2') === m2 && hub.matchOf('p3') === m2 && m2.seats.every((s) => s.pid != null))
+  assert.equal(hub.joinLobby(l2.code, seat('late'), 102 + PQ.BOT_WAIT_SEC), 'full')
+  // 혼자 매칭 중에 모집: 그 대기가 파티(방장) 대기로 바뀌고 기다린 시간은 그대로
+  hub.join(seat('alone'), 'lich', 2, 300)
+  const l3 = hub.lobbyFromTicket('alone', 310)!
+  assert.ok(l3 && l3.leader === 'alone' && hub.ticketOf('alone')!.seat.group === l3.code && hub.ticketOf('alone')!.since === 300)
+  assert.equal(hub.lobbyFromTicket('alone', 311), null, 'already a party ticket')
+  const rec = { code: l3.code, quest: 'lich' as const, diff: 2, at: 310 }
+  assert.deepEqual(hub.recruitOpen(rec, 320), { open: true, count: 1, size: 4 })
+  assert.equal(hub.recruitOpen(rec, 310 + PQ.RECRUIT_TTL_SEC).open, false, 'cards expire')
+  hub.leaveLobby('alone')
+  assert.equal(hub.recruitOpen(rec, 320).open, false, 'the party is gone')
 })
 
 test('party routes: create a party, join by code, leader starts, wrong codes are rate limited', async () => {
@@ -478,4 +499,71 @@ test('party live room: slow readers are cut, the heartbeat drops dead connection
   } finally {
     live.close()
   }
+})
+
+test('party recruit: [파티원 모집] posts an invite card in the all chat, others join from it (also while matching), cards close when full', async () => {
+  const a = await player()
+  const b = await player()
+  const c = await player()
+  const lich = { quest: 'lich', diff: 1, hero: { id: 'hans', hp: 500, atk: 40 } }
+  // 파티가 없으면 만들고 올린다
+  const r1 = await S.req('POST', '/v1/party/recruit', { token: a.token, body: lich })
+  assert.equal(r1.status, 200, JSON.stringify(r1.json))
+  const code = r1.json.party.lobby.code
+  assert.equal(r1.json.party.lobby.leader, true)
+  assert.deepEqual(r1.json.msg.party, { code, quest: 'lich', diff: 1, open: true, count: 1, size: 4 })
+  assert.ok(r1.json.msg.text.includes('[파티 모집]') && r1.json.msg.text.includes(code), r1.json.msg.text)
+  // 다른 성주의 채팅에도 초대장으로 보인다
+  const seen = await S.req('GET', '/v1/chat', { token: b.token })
+  const card = seen.json.all.find((m: any) => m.id === r1.json.msg.id)
+  assert.equal(card.party.code, code)
+  assert.equal(card.me, false)
+  // 같은 파티는 RECRUIT_GAP_SEC에 한 번
+  S.clock.t += 3
+  const again = await S.req('POST', '/v1/party/recruit', { token: a.token, body: {} })
+  assert.equal(again.json.error, 'recruit_wait', JSON.stringify(again.json))
+  // 방장이 매칭을 시작해도(사람만 기다린다) 초대장으로 들어온 사람은 같은 대기에 붙는다
+  const st = await S.req('POST', '/v1/party/lobby/start', { token: a.token, body: { diff: 1 } })
+  assert.equal(st.json.party.queue.state, 'queued')
+  assert.equal(st.json.party.queue.bots, false)
+  assert.equal(st.json.party.queue.bot_in, 0)
+  const jb = await S.req('POST', '/v1/party/lobby/join', { token: b.token, body: { code: card.party.code, hero: lich.hero } })
+  assert.equal(jb.status, 200, JSON.stringify(jb.json))
+  assert.equal(jb.json.party.queue.state, 'queued', 'joined the running queue')
+  for (let i = 0; i < PQ.RECRUIT_GAP_SEC / 10; i++) {
+    S.clock.t += 10
+    await S.req('GET', '/v1/party', { token: a.token })
+    await S.req('GET', '/v1/party', { token: b.token })
+  }
+  const r2 = await S.req('POST', '/v1/party/recruit', { token: b.token, body: {} })
+  assert.equal(r2.status, 200, 'any member can recruit')
+  assert.equal(r2.json.msg.party.count, 2)
+  for (let i = 0; i < 9; i++) {  // 앱이 대기 중 계속 묻는다
+    S.clock.t += 10
+    await S.req('GET', '/v1/party', { token: b.token })
+    assert.equal((await S.req('GET', '/v1/party', { token: a.token })).json.party.queue.state, 'queued', 'no AI lords fill the seats')
+  }
+  // 두 사람 더 → 자리가 다 차서 매치, 옛 초대장은 닫힌다
+  await S.req('POST', '/v1/party/lobby/join', { token: c.token, body: { code, hero: lich.hero } })
+  const d = await player()
+  const jd = await S.req('POST', '/v1/party/lobby/join', { token: d.token, body: { code, hero: lich.hero } })
+  assert.equal(jd.json.party.queue.state, 'confirm', JSON.stringify(jd.json.party.queue))
+  assert.ok(jd.json.party.queue.seats.every((s: any) => !s.bot))
+  const after = await S.req('GET', '/v1/chat', { token: d.token })
+  assert.equal(after.json.all.find((m: any) => m.id === r1.json.msg.id).party.open, false)
+  const e = await player()
+  const late = await S.req('POST', '/v1/party/lobby/join', { token: e.token, body: { code, hero: lich.hero } })
+  assert.equal(late.json.error, 'full')
+  // 혼자 매칭 중에 모집: 그 대기가 파티 대기가 된다
+  const q = await queueLich(e)
+  assert.equal(q.json.party.queue.state, 'queued')
+  const r3 = await S.req('POST', '/v1/party/recruit', { token: e.token, body: {} })
+  assert.equal(r3.status, 200, JSON.stringify(r3.json))
+  assert.equal(r3.json.party.queue.state, 'queued')
+  assert.equal(r3.json.party.lobby.leader, true)
+  // 채팅 금지면 못 올린다
+  const f = await player()
+  await S.db.query(`insert into chat_mutes (player_id, until, reason, at) values ($1, null, 't', now())`, [f.id])
+  const muted = await S.req('POST', '/v1/party/recruit', { token: f.token, body: lich })
+  assert.equal(muted.json.error, 'muted')
 })

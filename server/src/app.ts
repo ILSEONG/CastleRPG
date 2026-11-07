@@ -4690,10 +4690,10 @@ export function createApp(opts: AppOptions) {
     verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
   registerPvp(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
-  registerChat(app, { query, auth, clock, body, ApiError, verifyToken, isAdmin, live: opts.chatLive })
+  const chat = registerChat(app, { query, auth, clock, body, ApiError, verifyToken, isAdmin, live: opts.chatLive })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus, cacheMs: opsCacheMs })
   registerRetention(app, { query, auth, clock, ApiError, isAdmin })
-  registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, testHooks: !!opts.allowTestHooks },
+  registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, chat, testHooks: !!opts.allowTestHooks },
     opts.partyLive)
   registerInquiry(app, { query, auth, clock, body, ApiError, clientIp: RL.clientIp, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })
 

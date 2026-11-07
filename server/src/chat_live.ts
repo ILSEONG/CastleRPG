@@ -72,9 +72,9 @@ export class ChatLive {
   }
 
   // to = 받을 사람 id들(길드 채널), null = 연결된 모두(전체 채널). 보낸 사람은 뺀다.
-  publish(ch: 'all' | 'guild', row: ChatRow, to: string[] | null) {
+  publish(ch: 'all' | 'guild', row: ChatRow, to: string[] | null, party: unknown = null) {
     const sender = String(row.player_id)
-    const msg = { id: Number(row.id), name: String(row.name), text: String(row.text), at: Number(row.at), me: false }
+    const msg = { id: Number(row.id), name: String(row.name), text: String(row.text), at: Number(row.at), me: false, ...(party ? { party } : {}) }
     const out = JSON.stringify({ t: 'msg', ch, msg })
     const targets = to === null ? this.clients.values() : to.map((p) => this.clients.get(p)).filter((c): c is Client => !!c)
     for (const c of targets) if (c.pid !== sender) sendRaw(c.ws, out)

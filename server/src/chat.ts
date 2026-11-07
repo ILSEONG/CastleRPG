@@ -10,7 +10,7 @@
 //  POST /v1/admin/chat/mute {player, minutes, reason?}   minutes: 0 = 풀기, -1 = 영구, 1..MUTE_MAX_MIN = 그만큼. 금지하면 그 사람의 처리 전 신고는
 //       'muted'로 닫고, 신고된 그 사람의 메시지는 채팅에서 지운다
 //  POST /v1/admin/chat/report {id, status: 'open'|'dismissed'}   신고 하나를 넘기기(문제없음)·다시 열기
-// 메시지 = {id, name, text, at, me}. 이름은 다른 화면(랭킹·길드원)과 같은 G.playerName(id).
+// 메시지 = {id, name, text, at, me, party?}. party = 파티원 모집 초대장(party_routes.ts /v1/party/recruit — {code, quest, diff, count, size, open}). 이름은 다른 화면(랭킹·길드원)과 같은 G.playerName(id).
 // 길드 채널은 지금 든 길드의 실제 길드원만 본다(가상 길드원은 말하지 않는다).
 import type { Hono } from 'hono'
 import * as G from './guild.ts'
@@ -41,7 +41,13 @@ export function clean(text: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any
 
-export function registerChat(app: Hono<Any>, d: Any) {
+// registerChat이 돌려준다: 다른 기능이 채팅에 글을 올리는 길(파티원 모집)과 메시지에 붙일 초대장 찾기.
+export interface ChatApi {
+  send: (id: string, ch: 'all' | 'guild', text: string, onId?: (id: number) => void) => Promise<Any>
+  cards: ((id: number) => Any) | null
+}
+
+export function registerChat(app: Hono<Any>, d: Any): ChatApi {
   const { query, auth, clock, body, ApiError, isAdmin } = d
   const live = d.live as import('./chat_live.ts').ChatLive | undefined
   if (live) live.verify = d.verifyToken
@@ -49,13 +55,16 @@ export function registerChat(app: Hono<Any>, d: Any) {
   // GAP_SEC 안 두 번째 메시지는 메모리에서 먼저 막는다(2026-10-27 보안 점검: DB 검사는 insert 안 not exists라 동시에 보낸 여러 통이 모두 지났다). DB 검사도 그대로 둔다
   const sendLimit = new Limiter(1, GAP_SEC)
 
+  const api: ChatApi = { send: sendMessage, cards: null }
+  const cardOf = (id: number) => (api.cards ? api.cards(id) : null)
+
   // 실시간 연결로 밀어 준다(실패해도 보내기는 성공 — 받는 쪽은 폴링으로 채운다)
   async function push(channel: string, r: Any) {
     if (!live || live.clients.size === 0) return
     try {
       const to = channel === 'all' ? null
         : (await query('select player_id::text as p from player_guild where guild_id = $1', [channel.slice(2)])).map((x: Any) => String(x.p))
-      live.publish(channel === 'all' ? 'all' : 'guild', r, to)
+      live.publish(channel === 'all' ? 'all' : 'guild', r, to, cardOf(Number(r.id)))
     } catch (e) {
       console.warn(`[chat] live push failed: ${(e as Error).message}`)
     }
@@ -66,7 +75,10 @@ export function registerChat(app: Hono<Any>, d: Any) {
     return r ? { id: String(r.id), name: String(r.name) } : null
   }
 
-  const out = (r: Any, me: string) => ({ id: Number(r.id), name: String(r.name), text: String(r.text), at: Number(r.at), me: String(r.player_id) === me })
+  const out = (r: Any, me: string) => {
+    const party = cardOf(Number(r.id))
+    return { id: Number(r.id), name: String(r.name), text: String(r.text), at: Number(r.at), me: String(r.player_id) === me, ...(party ? { party } : {}) }
+  }
 
   const afterOf = (v: string | undefined) => {
     const n = Number(v ?? 0)
@@ -101,7 +113,12 @@ export function registerChat(app: Hono<Any>, d: Any) {
     const ch = b.channel
     if (ch !== 'all' && ch !== 'guild') throw new ApiError(400, 'bad_request', `'channel' must be one of ${CHANNELS.join(', ')}`)
     if (typeof b.text !== 'string') throw new ApiError(400, 'bad_request', "'text' must be a string")
-    const text = mask(clean(b.text))
+    return c.json({ server_now: clock(), msg: await sendMessage(id, ch, b.text) })
+  })
+
+  // 보내기(채팅 금지·도배 제한·욕설 가리기 모두 같다). onId = 넣은 메시지 id(실시간으로 밀기 전에 — 초대장을 붙인다). → 내보낼 메시지
+  async function sendMessage(id: string, ch: 'all' | 'guild', rawText: string, onId?: (mid: number) => void) {
+    const text = mask(clean(rawText))
     if (text === '') throw bad('empty', 'message is empty')
     const [mu] = await query('select extract(epoch from until)::float8 as until from chat_mutes where player_id = $1 and (until is null or until > to_timestamp($2::float8))', [id, clock()])
     if (mu) throw new ApiError(403, 'muted', mu.until == null ? 'chat is blocked' : `chat is blocked until ${new Date(Number(mu.until) * 1000).toISOString()}`)
@@ -113,16 +130,17 @@ export function registerChat(app: Hono<Any>, d: Any) {
     }
     const now = clock()
     if (!sendLimit.take(id, now)) throw bad('too_fast', `wait ${GAP_SEC} s between messages`)
-    const raw = clean(b.text)
+    const raw = clean(rawText)
     const [r] = await query(`insert into chat_messages (channel, player_id, name, text, at, raw)
       select $1, $2, $3, $4, to_timestamp($5::float8), $6
       where not exists (select 1 from chat_messages where player_id = $2 and at > to_timestamp($5::float8 - ${GAP_SEC}))
       returning id, player_id::text, name, text, extract(epoch from at)::float8 as at`, [channel, id, G.playerName(id), text, now, raw === text ? null : raw])
     if (!r) throw bad('too_fast', `wait ${GAP_SEC} s between messages`)
+    onId?.(Number(r.id))
     await push(channel, r)
     await query(`delete from chat_messages where channel = $1 and id <= (select id from chat_messages where channel = $1 order by id desc offset ${KEEP} limit 1)`, [channel])
-    return c.json({ server_now: now, msg: out(r, id) })
-  })
+    return out(r, id)
+  }
 
   app.post('/v1/chat/report', auth, async (c: Any) => {
     const id = c.get('playerId') as string
@@ -221,4 +239,5 @@ export function registerChat(app: Hono<Any>, d: Any) {
     if (!r) throw new ApiError(404, 'no_report', 'no such report')
     return c.json({ server_now: clock(), status: String(r.status) })
   })
+  return api
 }
